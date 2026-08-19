@@ -4,6 +4,7 @@ import { useDatos } from '../hooks/useDatos'
 import { limpiarCuestionarios, segmentarUnidades, type Unidad } from '../lib/extraer'
 import { detectarTipo, parsearBanco, type Deteccion, type PreguntaCruda } from '../lib/markdown'
 import { idPregunta, slug } from '../lib/store'
+import { importarConRecarga } from '../lib/cargaDiferida'
 import type { Pack, Pregunta } from '../types'
 
 type Analisis = {
@@ -165,8 +166,8 @@ export function Contenido() {
     try {
       // El SDK solo se descarga cuando de verdad se va a generar.
       const [{ default: Anthropic }, { generarPreguntas }] = await Promise.all([
-        import('@anthropic-ai/sdk'),
-        import('../lib/generar'),
+        importarConRecarga(() => import('@anthropic-ai/sdk')),
+        importarConRecarga(() => import('../lib/generar')),
       ])
       const client = new Anthropic({ apiKey: apiKey.trim(), dangerouslyAllowBrowser: true })
       const tema = temaDelAnalisis()
@@ -208,7 +209,7 @@ export function Contenido() {
       }
       if (/\.pdf$/i.test(f.name)) {
         setTrabajando('Leyendo el PDF…')
-        const { textoDePdf } = await import('../lib/pdf')
+        const { textoDePdf } = await importarConRecarga(() => import('../lib/pdf'))
         const t = await textoDePdf(f)
         setTexto(t)
         setTrabajando(null)

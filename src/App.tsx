@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProveedorDatos, useDatos } from './hooks/useDatos'
+import { importarConRecarga } from './lib/cargaDiferida'
 import { Layout } from './components/Layout'
 import { Home } from './pages/Home'
 import { Test } from './pages/Test'
@@ -9,7 +10,7 @@ import { Preguntas } from './pages/Preguntas'
 import { Acceso } from './pages/Acceso'
 
 const Contenido = lazy(() =>
-  import('./pages/Contenido').then((m) => ({ default: m.Contenido })),
+  importarConRecarga(() => import('./pages/Contenido').then((m) => ({ default: m.Contenido }))),
 )
 
 function Rutas() {
