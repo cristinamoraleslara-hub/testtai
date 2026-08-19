@@ -1,5 +1,5 @@
 import type { Pregunta, Progreso, SesionDiaria, Tema } from '../types'
-import type { Store } from './store'
+import { deduplicar, type Store } from './store'
 import { hoy } from './srs'
 
 const K = {
@@ -54,13 +54,14 @@ export const localStore: Store = {
     escribir(K.temas, temas)
 
     const preguntas = leer<Pregunta[]>(K.preguntas, [])
-    for (const q of pack.preguntas) {
+    const entrantes = deduplicar(pack.preguntas)
+    for (const q of entrantes) {
       const i = preguntas.findIndex((x) => x.id === q.id)
       if (i >= 0) preguntas[i] = q
       else preguntas.push(q)
     }
     escribir(K.preguntas, preguntas)
-    return { temas: pack.temas.length, preguntas: pack.preguntas.length }
+    return { temas: pack.temas.length, preguntas: entrantes.length }
   },
 
   async borrarTema(temaId) {

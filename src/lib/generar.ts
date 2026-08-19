@@ -156,7 +156,7 @@ export async function generarPreguntas(
   for (const q of crudas) {
     if (q.opciones.length !== 4) continue
     if (new Set(q.opciones.map((o) => o.trim().toLowerCase())).size !== 4) continue
-    const id = idPregunta(temaId, q.enunciado)
+    const id = idPregunta(temaId, q.enunciado, q.opciones)
     if (vistos.has(id)) continue
     vistos.add(id)
     preguntas.push({

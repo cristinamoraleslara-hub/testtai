@@ -132,7 +132,7 @@ export function Contenido() {
     try {
       const tema = temaDelAnalisis()
       const preguntasFinales: Pregunta[] = analisis.crudas.map((q) => ({
-        id: idPregunta(tema.id, q.enunciado),
+        id: idPregunta(tema.id, q.enunciado, q.opciones),
         tema_id: tema.id,
         enunciado: q.enunciado,
         opciones: q.opciones as Pregunta['opciones'],

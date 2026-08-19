@@ -90,7 +90,7 @@ async function main() {
   if (tipo === 'banco') {
     const { preguntas: crudas, incidencias } = parsearBanco(bruto)
     preguntas = crudas.map((q) => ({
-      id: idPregunta(temaId, q.enunciado),
+      id: idPregunta(temaId, q.enunciado, q.opciones),
       tema_id: temaId,
       enunciado: q.enunciado,
       opciones: q.opciones as Pregunta['opciones'],

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Pregunta, Progreso, SesionDiaria, Tema } from '../types'
-import type { Store } from './store'
+import { deduplicar, type Store } from './store'
 import { hoy } from './srs'
 
 export function crearSupabaseStore(sb: SupabaseClient, userId: string): Store {
@@ -46,12 +46,14 @@ export function crearSupabaseStore(sb: SupabaseClient, userId: string): Store {
         const { error } = await sb.from('temas').upsert(pack.temas)
         fallar(error)
       }
+      // Postgres rechaza el mismo id dos veces en una sola orden.
+      const preguntas = deduplicar(pack.preguntas)
       // Lotes de 500 para no exceder el tamaño máximo de petición.
-      for (let i = 0; i < pack.preguntas.length; i += 500) {
-        const { error } = await sb.from('preguntas').upsert(pack.preguntas.slice(i, i + 500))
+      for (let i = 0; i < preguntas.length; i += 500) {
+        const { error } = await sb.from('preguntas').upsert(preguntas.slice(i, i + 500))
         fallar(error)
       }
-      return { temas: pack.temas.length, preguntas: pack.preguntas.length }
+      return { temas: pack.temas.length, preguntas: preguntas.length }
     },
 
     async borrarTema(temaId) {
