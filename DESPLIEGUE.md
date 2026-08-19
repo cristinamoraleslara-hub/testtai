@@ -6,8 +6,9 @@ portátil, con el mismo progreso en los dos. **Coste 0 €**, sin tarjeta.
 Son dos servicios porque hacen cosas distintas: **Vercel** sirve la web y **Supabase**
 guarda tu progreso. Ambos tienen plan gratuito de sobra para esto.
 
-> El orden importa en un punto: Supabase necesita saber la URL de Vercel, que no
-> existe hasta que despliegas. Por eso el paso 4 va después del 3.
+> El acceso es con correo y contraseña, verificada por el servidor de Supabase. La
+> contraseña no está en el código: este bundle es público y cualquiera podría leerlo.
+> Lo que protege tus datos son las políticas RLS atadas a tu usuario.
 
 ---
 
@@ -43,7 +44,12 @@ En **Project Settings → API** copia dos valores:
 
 ## 3. Publicar la web (Vercel)
 
-Desde esta carpeta, y en este orden:
+**Si importas el repo desde GitHub** (lo más cómodo): en Vercel, *Add New → Project* →
+elige el repo. *Framework Preset*: **Vite**. En *Environment Variables* añade las dos del
+paso 2, y **borra cualquier fila de `ANTHROPIC_API_KEY`**: ahí no sirve para nada, y con
+prefijo `VITE_` quedaría expuesta en el JavaScript público. Dale a **Deploy**.
+
+**O desde la terminal**, en este orden:
 
 ```bash
 npx vercel login
@@ -75,24 +81,27 @@ Al terminar te imprime la URL pública. **Cópiala**, hace falta ya.
 > Las variables se incrustan al compilar, por eso van antes del despliegue. Si las
 > cambias después, hay que volver a lanzar `npx vercel --prod`.
 
-## 4. Autorizar esa URL en Supabase
+## 4. Crear tu usuario
 
-Sin este paso el enlace de acceso por correo no funcionará.
+No hay registro público: te creas el usuario a mano una vez, y así nadie más puede entrar.
 
-En Supabase → **Authentication → URL Configuration**:
+En Supabase → **Authentication → Users** → **Add user** → *Create new user*:
 
-- **Site URL**: la URL de Vercel (`https://tu-proyecto.vercel.app`)
-- **Redirect URLs**: añade la misma, y también `http://localhost:5173` si quieres
-  seguir entrando en local.
+- **Email**: el tuyo
+- **Password**: la que quieras, guárdala en tu gestor de contraseñas
+- Marca **Auto Confirm User** (si no, el usuario queda sin confirmar y no podrás entrar)
 
-Guarda. No hace falta volver a desplegar: es configuración del servidor.
+Y desactiva el registro público, para que nadie más pueda crearse una cuenta:
+
+> **Authentication → Sign In / Providers → Email** → desactiva *Allow new users to sign up*
 
 ## 5. Entrar y cargar tus contenidos
 
-1. Abre la URL, escribe tu correo y pulsa **Enviarme el enlace**.
-2. Te llega un correo de Supabase; **ábrelo en el mismo dispositivo**.
-3. Ya dentro, ve a **Contenido → Elegir archivo** y sube tus `.md`.
-4. Repite el acceso en el móvil con el mismo correo: verás lo mismo.
+1. Abre tu URL, escribe correo y contraseña, **Entrar**.
+2. La sesión se guarda: no tendrás que repetirlo en ese dispositivo. Para salir, el
+   enlace *salir* junto al nombre en la cabecera.
+3. **Contenido → Elegir archivo** y sube tus `.md`.
+4. Repite el acceso en el móvil con el mismo correo y contraseña: verás lo mismo.
 
 ## 6. Dejarlo como app en el móvil
 
@@ -118,11 +127,11 @@ cada `git push`.
 pausa el proyecto tras unos días sin usarlo. Entra en supabase.com y pulsa **Restore**;
 tarda un minuto y no se pierde nada. Estudiando a diario no debería pasarte.
 
-**El enlace del correo no entra** — casi siempre es el paso 4 sin hacer, o haber abierto
-el enlace en un dispositivo distinto del que lo pidió.
+**«Correo o contraseña incorrectos»** — revisa el correo. Si estás segura de la
+contraseña, cámbiala en Authentication → Users → tu usuario → *Reset password*.
 
-**El correo no llega** — mira spam. El servidor de correo gratuito de Supabase limita a
-unos pocos envíos por hora; si has probado varias veces seguidas, espera un poco.
+**«Ese usuario está sin confirmar»** — se te olvidó marcar *Auto Confirm User* al
+crearlo. Edítalo en Authentication → Users y confírmalo.
 
 **Quiero llevarme mis datos** — **Contenido → Exportar copia de seguridad** baja un JSON
 con todos tus temas y preguntas. El progreso vive en Supabase; puedes verlo y exportarlo
