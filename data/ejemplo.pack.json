@@ -1,0 +1,138 @@
+{
+  "temas": [
+    {
+      "id": "ley-39-2015-plazos-y-silencio",
+      "nombre": "Ley 39/2015 — Plazos y silencio administrativo",
+      "descripcion": "Pack de ejemplo (arts. 21 a 24)",
+      "orden": 0
+    }
+  ],
+  "preguntas": [
+    {
+      "id": "q_1cmn6tat2g2xq",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "Cuando las normas reguladoras de un procedimiento no fijan el plazo máximo para notificar la resolución expresa, ¿cuál se aplica?",
+      "opciones": [
+        "Tres meses",
+        "Un mes",
+        "Seis meses",
+        "Veinte días hábiles"
+      ],
+      "correcta": 0,
+      "explicacion": "El artículo 21.3 fija supletoriamente el plazo de tres meses cuando la norma del procedimiento no señala ninguno.",
+      "fuente": "Artículo 21.3"
+    },
+    {
+      "id": "q_1s1p7sdn2ee1r",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "El plazo máximo para notificar la resolución expresa no puede exceder de seis meses, salvo que:",
+      "opciones": [
+        "Lo acuerde el órgano instructor",
+        "Una norma con rango de Ley establezca uno mayor",
+        "El interesado preste su conformidad",
+        "Se trate de un procedimiento iniciado de oficio"
+      ],
+      "correcta": 1,
+      "explicacion": "Solo una norma con rango de Ley puede superar el límite de seis meses del artículo 21.2.",
+      "fuente": "Artículo 21.2"
+    },
+    {
+      "id": "q_sbg7mp1dbthl3",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "La obligación de dictar resolución expresa y notificarla alcanza a:",
+      "opciones": [
+        "Solo a los iniciados de oficio",
+        "Solo a los iniciados a solicitud del interesado",
+        "Todos los procedimientos, cualquiera que sea su forma de iniciación",
+        "Únicamente a los procedimientos sancionadores"
+      ],
+      "correcta": 2,
+      "explicacion": "El artículo 21.1 impone la obligación en todos los procedimientos, con independencia de su forma de iniciación.",
+      "fuente": "Artículo 21.1"
+    },
+    {
+      "id": "q_12g2m18oeya3",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "Al requerir a un interesado la subsanación de deficiencias, ¿qué plazo se concede en defecto de otro?",
+      "opciones": [
+        "Un mes",
+        "Cinco días",
+        "Quince días",
+        "Diez días"
+      ],
+      "correcta": 3,
+      "explicacion": "El artículo 22.1 fija diez días como plazo de subsanación a falta de plazo expreso, y durante ese tiempo se suspende el cómputo.",
+      "fuente": "Artículo 22.1"
+    },
+    {
+      "id": "q_1wzrk381tk0uwx",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "La obtención de un pronunciamiento previo y preceptivo de un órgano de la Unión Europea:",
+      "opciones": [
+        "Permite suspender el plazo máximo para resolver",
+        "Interrumpe el procedimiento definitivamente",
+        "Obliga a archivar las actuaciones",
+        "No afecta al cómputo del plazo"
+      ],
+      "correcta": 0,
+      "explicacion": "El artículo 22.2 contempla este supuesto como causa de suspensión del plazo máximo para resolver.",
+      "fuente": "Artículo 22.2"
+    },
+    {
+      "id": "q_1jcuku1a1jnej",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "Contra el acuerdo que resuelve sobre la ampliación del plazo máximo para resolver:",
+      "opciones": [
+        "Cabe recurso de alzada",
+        "No cabe recurso alguno",
+        "Cabe recurso potestativo de reposición",
+        "Cabe recurso contencioso-administrativo directo"
+      ],
+      "correcta": 1,
+      "explicacion": "El artículo 23.2 excluye expresamente cualquier recurso contra el acuerdo de ampliación de plazos.",
+      "fuente": "Artículo 23.2"
+    },
+    {
+      "id": "q_1bf78irch6gf2",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "La ampliación del plazo máximo de resolución y notificación exige:",
+      "opciones": [
+        "Autorización del órgano superior jerárquico",
+        "Informe favorable del interesado",
+        "Motivación clara de las circunstancias concurrentes",
+        "Publicación en el boletín oficial correspondiente"
+      ],
+      "correcta": 2,
+      "explicacion": "El artículo 23.1 la configura como excepcional y condicionada a una motivación clara de las circunstancias.",
+      "fuente": "Artículo 23.1"
+    },
+    {
+      "id": "q_y022iy1hwlrqi",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "En procedimientos iniciados a solicitud del interesado, el vencimiento del plazo máximo sin resolución expresa:",
+      "opciones": [
+        "Exime a la Administración de resolver",
+        "Produce la caducidad automática del procedimiento",
+        "Obliga a iniciar de nuevo el procedimiento",
+        "Legitima al interesado para entender estimada su solicitud por silencio"
+      ],
+      "correcta": 3,
+      "explicacion": "El artículo 24.1 establece el silencio estimatorio como regla general, sin perjuicio del deber de resolver.",
+      "fuente": "Artículo 24.1"
+    },
+    {
+      "id": "q_oetiri1bcaqcz",
+      "tema_id": "ley-39-2015-plazos-y-silencio",
+      "enunciado": "La estimación por silencio administrativo tiene la consideración de:",
+      "opciones": [
+        "Acto administrativo finalizador del procedimiento a todos los efectos",
+        "Mera expectativa sin efectos jurídicos",
+        "Acto de trámite no impugnable",
+        "Propuesta de resolución provisional"
+      ],
+      "correcta": 0,
+      "explicacion": "El artículo 24.2 le atribuye la naturaleza de acto administrativo finalizador del procedimiento.",
+      "fuente": "Artículo 24.2"
+    }
+  ]
+}
