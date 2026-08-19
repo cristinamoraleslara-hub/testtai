@@ -23,6 +23,59 @@ export type Deteccion = {
 }
 
 const ENCABEZADO = /^\s*(#{1,6})\s+(.+?)\s*#*$/
+
+/** Línea de índice: «1.- CUESTIONARIO 2008 ..................... 5». */
+const LINEA_INDICE = /\.{4,}\s*\d*\s*$/
+
+/** Empieza un ítem numerado: «4. De acuerdo con…». Corta continuaciones. */
+const ITEM_NUMERADO = /^\s*\d{1,3}\s*[.)]\s+\S/
+
+/**
+ * Un cuaderno de oposición se organiza en secciones tituladas
+ * («1.- CUESTIONARIO 2008 GSI», «9.- RESPUESTAS CUESTIONARIO 2008 GSI»)
+ * aunque el Markdown venga de un PDF y no traiga ni un solo `#`.
+ * Reconocerlas es lo que permite luego casar cada tanda de preguntas con su
+ * solucionario, aunque estén a treinta páginas de distancia.
+ */
+// Con \b: si no, «a) Red TESTA.» cuela como título porque contiene «test».
+const PALABRA_SECCION = /\b(cuestionarios?|respuestas|soluciones?|solucionario|test|examen)\b/i
+
+export function esTituloSeccion(linea: string): boolean {
+  const t = linea.trim()
+  if (!t || t.length > 90) return false
+  if (LINEA_INDICE.test(t)) return false
+  if (ENCABEZADO.test(t)) return true
+  if (/[?]\s*$/.test(t)) return false
+  if (esOpcion(t)) return false // una opción nunca es un título de sección
+  const sinNumero = t.replace(/^\d+\s*[.\-)]{1,2}\s*/, '')
+  if (!PALABRA_SECCION.test(sinNumero)) return false
+  // Los títulos de estos cuadernos van en mayúsculas; así no se confunde
+  // «1. Señale la respuesta correcta:» con un título de sección.
+  const letras = sinNumero.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, '')
+  if (letras.length < 3) return false
+  const mayusculas = sinNumero.replace(/[^A-ZÁÉÍÓÚÑ]/g, '').length
+  return mayusculas / letras.length > 0.6
+}
+
+/**
+ * Reduce un título a lo que lo distingue de los demás, quitando la numeración
+ * y las palabras genéricas: «1.- CUESTIONARIO 2008 GSI» y «9.- RESPUESTAS
+ * CUESTIONARIO 2008 GSI» dan los dos «2008 gsi», y por ahí se emparejan.
+ */
+export function discriminador(titulo: string): string {
+  return titulo
+    .replace(/^#{1,6}\s*/, '')
+    .replace(/^\d+\s*[.\-)]{1,2}\s*/, '')
+    .replace(
+      /\b(respuestas?|soluciones?|solucionario|cuestionarios?|test|examen|de|del|la|el|los|las|y)\b/gi,
+      ' ',
+    )
+    .replace(/[^\wÁÉÍÓÚÑáéíóúñ]+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
 const META =
   /^\s*(?:>\s*)?\**\s*(respuesta|soluci[oó]n|correcta|clave|r|explicaci[oó]n|justificaci[oó]n|motivo|fuente|referencia|ref|art[íi]culo)\b\s*\**\s*[:.\-–]\s*(.*)$/i
 const CITA = /^\s*>\s?(.*)$/
@@ -55,6 +108,10 @@ type Bloque = {
   meta: { clave: string; valor: string }[]
   citas: string[]
   encabezado: string
+  /** Discriminador del título de sección donde vive la pregunta. */
+  seccion: string
+  /** Título de sección tal cual, para citarlo como fuente. */
+  tituloSeccion: string
 }
 
 const CABECERA_SOLUCIONES =
@@ -63,89 +120,117 @@ const CABECERA_SOLUCIONES =
 /** «1-b», «1. b», «1) b», «1 → b», «| 1 | b |»: pareja número-letra. */
 const PAREJAS = /(\d{1,3})\s*[.):\-–=|→]{0,2}\s*\|?\s*([a-eA-E])(?![a-zA-Z])/g
 
-/** Un solucionario suelto y dónde empieza, para saber a qué preguntas aplica. */
+/** Un solucionario suelto, con dónde está y a qué sección pertenece. */
 export type BloqueClave = {
   linea: number
+  /** Discriminador del título de su sección, para casarlo con las preguntas. */
+  seccion: string
   entradas: Map<number, number>
 }
 
 /**
- * Extrae los solucionarios sueltos («Soluciones: 1-b 2-a 3-d»), cada uno con
- * su posición. Se guardan por separado a propósito: un cuaderno con varios
- * temas reinicia la numeración en cada uno, y fundirlos en un único mapa hace
- * que un tema pise las respuestas de otro sin avisar.
+ * Extrae los solucionarios sueltos («Soluciones: 1-b 2-a 3-d», o una tabla
+ * «| 1. B | 2. A |»), agrupados por la sección que los titula.
+ *
+ * Agrupar por sección y no por proximidad es lo que aguanta un cuaderno real:
+ * entre las filas de una tabla hay líneas separadoras, subtítulos como
+ * «BLOQUE I Y II» y huecos, y agrupar por contigüidad los partía en trozos.
  */
 export function extraerBloquesClave(lineas: string[]): BloqueClave[] {
   const bloques: BloqueClave[] = []
-  let actual: BloqueClave | null = null
+  const porSeccion = new Map<string, BloqueClave>()
+  let seccion = ''
   let enSolucionario = false
-  let huecoDesdeUltimaClave = 0
-
-  const cerrar = () => {
-    if (actual && actual.entradas.size) bloques.push(actual)
-    actual = null
-  }
 
   for (let i = 0; i < lineas.length; i++) {
     const linea = lineas[i]
 
-    if (CABECERA_SOLUCIONES.test(linea)) {
-      cerrar()
+    if (esTituloSeccion(linea)) {
+      const titulo = linea.trim()
+      // Un título con «respuestas/soluciones» abre solucionario; el resto lo cierra.
+      enSolucionario = CABECERA_SOLUCIONES.test(titulo.replace(/^\d+\s*[.\-)]{1,2}\s*/, ''))
+      const d = discriminador(titulo)
+      if (d) seccion = d
+    } else if (CABECERA_SOLUCIONES.test(linea)) {
       enSolucionario = true
-      huecoDesdeUltimaClave = 0
-      // La cabecera puede traer ya las parejas: «Soluciones: 1-b 2-a».
-    } else if (enSolucionario && /^\s*(?:#{1,6}\s)/.test(linea)) {
-      enSolucionario = false
-      cerrar()
     }
+
+    if (LINEA_INDICE.test(linea)) continue // el índice del cuaderno no es clave
 
     const parejas = [...linea.matchAll(PAREJAS)]
     // Tres o más parejas en una línea son inequívocas aunque no haya cabecera;
     // una sola solo se acepta dentro de un bloque de soluciones.
-    const esLineaClave = parejas.length >= 3 || (enSolucionario && parejas.length >= 1)
+    if (parejas.length < 3 && !(enSolucionario && parejas.length >= 1)) continue
 
-    if (!esLineaClave) {
-      if (linea.trim()) huecoDesdeUltimaClave++
-      // Texto de verdad entre medias: el solucionario anterior ha terminado.
-      if (huecoDesdeUltimaClave > 3) cerrar()
-      continue
+    const idSeccion = seccion || `pos:${i}`
+    let bloque = porSeccion.get(idSeccion)
+    if (!bloque) {
+      bloque = { linea: i, seccion, entradas: new Map() }
+      porSeccion.set(idSeccion, bloque)
+      bloques.push(bloque)
     }
-
-    huecoDesdeUltimaClave = 0
-    if (!actual) actual = { linea: i, entradas: new Map() }
     for (const [, num, letra] of parejas) {
       const idx = LETRAS.indexOf(letra.toLowerCase())
-      if (idx >= 0) actual.entradas.set(Number(num), idx)
+      // La primera respuesta gana: si un número se repite dentro de la misma
+      // sección es ruido, no una corrección.
+      if (idx >= 0 && !bloque.entradas.has(Number(num))) bloque.entradas.set(Number(num), idx)
     }
   }
-  cerrar()
 
-  return bloques
+  return bloques.filter((b) => b.entradas.size > 0)
 }
 
 /**
- * Un solucionario responde a las preguntas que lo preceden, hasta el
- * solucionario anterior. Si solo hay uno en todo el documento, vale para
- * todas. Cuando no encaja, se devuelve null y la pregunta se descarta con
- * aviso: antes eso que asignarle una respuesta de otro tema.
+ * ¿Hablan del mismo bloque «CUESTIONARIO 2008 GSI» y «RESPUESTAS CUESTIONARIO
+ * 2008 GSI»? Tras quitar las palabras genéricas quedan «2008 gsi» y «2008 gsi».
+ * Pero también hay que casar «Tema 1. Plazos» con «Soluciones tema 1», donde
+ * uno es más escueto que el otro: basta con que las palabras de uno estén
+ * contenidas en las del otro.
+ */
+export function titulosCasan(a: string, b: string): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  const pa = new Set(a.split(' ').filter(Boolean))
+  const pb = new Set(b.split(' ').filter(Boolean))
+  if (!pa.size || !pb.size) return false
+  const [chico, grande] = pa.size <= pb.size ? [pa, pb] : [pb, pa]
+  return [...chico].every((p) => grande.has(p))
+}
+
+/**
+ * Decide qué solucionario responde a una pregunta. Por orden:
+ *
+ *   1. El que comparte título con ella («CUESTIONARIO 2008» ↔ «RESPUESTAS
+ *      CUESTIONARIO 2008»). Es lo único que funciona cuando un cuaderno pone
+ *      ocho cuestionarios seguidos y luego las ocho tandas de respuestas.
+ *   2. Si no hay títulos que casen, el primero que venga después de ella.
+ *   3. Si solo hay un solucionario en todo el documento, ese.
+ *
+ * Si nada encaja devuelve null y la pregunta se descarta con aviso: antes eso
+ * que colocarle la respuesta de otro cuestionario.
  */
 export function claveParaPregunta(
   bloques: BloqueClave[],
   lineaPregunta: number,
   numero: number | null,
+  seccionPregunta = '',
 ): number | null {
   if (numero === null || !bloques.length) return null
 
+  if (seccionPregunta) {
+    const porTitulo = bloques.filter((b) => titulosCasan(b.seccion, seccionPregunta))
+    if (porTitulo.length === 1) return porTitulo[0].entradas.get(numero) ?? null
+    if (porTitulo.length > 1) return null // ambiguo: mejor no adivinar
+  }
+
+  // Sin títulos utilizables, vale la posición… salvo que haya varias tandas de
+  // preguntas y todas las respuestas al final, donde la posición engaña.
+  const hayTitulos = bloques.some((b) => b.seccion)
+  if (hayTitulos && seccionPregunta) return null
+
   const siguiente = bloques.find((b) => b.linea > lineaPregunta)
-  if (siguiente) {
-    const v = siguiente.entradas.get(numero)
-    return v ?? null
-  }
-  // Sin solucionario después: solo se acepta si hay uno único en el documento.
-  if (bloques.length === 1) {
-    const v = bloques[0].entradas.get(numero)
-    return v ?? null
-  }
+  if (siguiente) return siguiente.entradas.get(numero) ?? null
+  if (bloques.length === 1) return bloques[0].entradas.get(numero) ?? null
   return null
 }
 
@@ -161,6 +246,9 @@ function trocearBloques(texto: string): Bloque[] {
   const pila: string[] = []
   let usadaHasta = -1
 
+  let seccion = ''
+  let tituloSeccion = ''
+
   for (let i = 0; i < lineas.length; i++) {
     const enc = lineas[i].match(ENCABEZADO)
     if (enc) {
@@ -168,40 +256,88 @@ function trocearBloques(texto: string): Bloque[] {
       pila[nivel] = limpiarMarkdown(enc[2])
       for (let n = nivel + 1; n < pila.length; n++) pila[n] = ''
     }
+    if (esTituloSeccion(lineas[i])) {
+      const d = discriminador(lineas[i])
+      if (d) {
+        seccion = d
+        tituloSeccion = limpiarMarkdown(lineas[i]).replace(/^\d+\s*[.\-)]{1,2}\s*/, '')
+      }
+    }
+    if (LINEA_INDICE.test(lineas[i])) continue
 
     if (!esOpcion(lineas[i])) continue
 
-    // Extiende la tanda de opciones saltando líneas en blanco sueltas.
+    // Extiende la tanda de opciones. Un PDF convertido a Markdown parte las
+    // opciones largas en varias líneas, así que una línea suelta detrás de una
+    // opción se trata como continuación suya y no como final de la tanda.
     const lineasOpcion: string[] = []
     let j = i
     while (j < lineas.length && lineasOpcion.length < 6) {
-      if (!lineas[j].trim()) {
-        if (j + 1 < lineas.length && esOpcion(lineas[j + 1])) {
-          j++
+      const l = lineas[j]
+      if (!l.trim()) {
+        // Un salto de página del PDF deja una línea en blanco en mitad de una
+        // frase. Se mira qué viene después de los blancos: si es otra opción, o
+        // el resto de la que estábamos leyendo, la tanda sigue.
+        let k = j
+        while (k < lineas.length && !lineas[k].trim()) k++
+        if (k >= lineas.length) break
+        const sig = lineas[k]
+        const continuaFrase =
+          lineasOpcion.length > 0 &&
+          lineasOpcion.length < 4 &&
+          !ITEM_NUMERADO.test(sig) &&
+          !esTituloSeccion(sig) &&
+          !META.test(sig)
+        if (esOpcion(sig) || continuaFrase) {
+          j = k
           continue
         }
         break
       }
-      if (!esOpcion(lineas[j])) break
-      lineasOpcion.push(lineas[j])
+      if (esOpcion(l)) {
+        lineasOpcion.push(l)
+        j++
+        continue
+      }
+      // ¿Continuación de la opción anterior, o ya es otra cosa?
+      const cortaLaTanda =
+        !lineasOpcion.length || ITEM_NUMERADO.test(l) || esTituloSeccion(l) || META.test(l)
+      if (cortaLaTanda) break
+      lineasOpcion[lineasOpcion.length - 1] += ' ' + l.trim()
       j++
     }
     if (lineasOpcion.length < 3) continue
 
-    // El enunciado es la última línea con contenido antes de las opciones.
-    let enunciado = ''
+    // El enunciado también viene partido: se recoge hacia atrás hasta dar con
+    // la línea numerada que lo abre, y se recompone en orden. Los enunciados
+    // largos de normativa europea llegan a ocupar diez líneas con un salto de
+    // página en medio, así que el tope va por longitud, no por número de
+    // líneas; quien corta de verdad es la opción anterior o el título.
+    const partes: string[] = []
     let numero: number | null = null
     let nivelEnunciado = 7
-    for (let k = i - 1; k > usadaHasta; k--) {
+    let largo = 0
+    for (let k = i - 1; k > usadaHasta && largo < 1500; k--) {
       const l = lineas[k]
-      if (!l.trim() || esOpcion(l) || META.test(l)) continue
+      if (!l.trim() || META.test(l)) continue
+      largo += l.length
+      if (esOpcion(l) || LINEA_INDICE.test(l)) break
+      // Un encabezado Markdown sí puede ser el enunciado («### ¿Cuál es…?»);
+      // un título suelto en mayúsculas («1.- CUESTIONARIO 2008») nunca lo es.
+      if (esTituloSeccion(l) && !ENCABEZADO.test(l)) break
       const limpio = limpiarMarkdown(l)
-      const numerado = limpio.match(/^(\d{1,3})\s*[.)–-]\s*(.*)$/)
-      numero = numerado ? Number(numerado[1]) : null
-      enunciado = numerado ? numerado[2] : limpio
+      const numerado = limpio.match(/^(\d{1,3})\s*[.)–-]\s+(.*)$/)
+      if (numerado) {
+        numero = Number(numerado[1])
+        partes.unshift(numerado[2])
+        nivelEnunciado = l.match(ENCABEZADO)?.[1].length ?? 7
+        break
+      }
+      partes.unshift(limpio)
       nivelEnunciado = l.match(ENCABEZADO)?.[1].length ?? 7
-      break
+      if (ENCABEZADO.test(l)) break
     }
+    const enunciado = partes.join(' ').replace(/\s+/g, ' ').trim()
 
     // Si el enunciado es él mismo un encabezado, la fuente es su ancestro:
     // «### ¿Cuál es el plazo?» bajo «## Artículo 21» cita el artículo.
@@ -234,7 +370,7 @@ function trocearBloques(texto: string): Bloque[] {
       break
     }
 
-    bloques.push({ enunciado, numero, linea: i, lineasOpcion, meta, citas, encabezado })
+    bloques.push({ enunciado, numero, linea: i, lineasOpcion, meta, citas, encabezado, seccion, tituloSeccion })
     usadaHasta = k - 1
     i = k - 1
   }
@@ -298,7 +434,14 @@ export function parsearBanco(texto: string): ResultadoBanco {
   const bloques = trocearBloques(texto)
 
   for (const b of bloques) {
-    const etiqueta = (b.enunciado || b.encabezado || '(sin enunciado)').slice(0, 60)
+    // Ubicar la pregunta (cuestionario y número) hace el aviso accionable:
+    // sin eso hay que buscar el enunciado a mano en un documento de 36 páginas.
+    const donde = [b.tituloSeccion, b.numero !== null ? `pregunta ${b.numero}` : '']
+      .filter(Boolean)
+      .join(', ')
+    const etiqueta =
+      (donde ? `${donde} — ` : '') +
+      `«${(b.enunciado || b.encabezado || '(sin enunciado)').slice(0, 50)}…»`
     const opciones = b.lineasOpcion.map(textoOpcion).filter(Boolean)
 
     if (!b.enunciado) {
@@ -306,14 +449,14 @@ export function parsearBanco(texto: string): ResultadoBanco {
       continue
     }
     if (opciones.length !== 4) {
-      incidencias.push(`«${etiqueta}…»: ${opciones.length} opciones en vez de 4.`)
+      incidencias.push(`${etiqueta}: ${opciones.length} opciones en vez de 4.`)
       continue
     }
 
     const correcta = resolverCorrecta(b, opciones, bloquesClave)
     if (correcta < 0) {
       incidencias.push(
-        `«${etiqueta}…»: no se sabe cuál es la respuesta correcta. Márcala con «- [x]», con negrita, o añade una línea «Respuesta: b» o un solucionario «1-b 2-a» detrás de estas preguntas.`,
+        `${etiqueta}: no aparece su respuesta en el solucionario (¿anulada?). Márcala con «- [x]», con negrita, o con una línea «Respuesta: b».`,
       )
       continue
     }
@@ -327,7 +470,10 @@ export function parsearBanco(texto: string): ResultadoBanco {
       correcta,
       explicacion: meta('explicación', 'explicacion', 'justificación', 'justificacion', 'motivo') ||
         b.citas.join(' '),
-      fuente: meta('fuente', 'referencia', 'ref', 'artículo', 'articulo') || b.encabezado,
+      fuente:
+        meta('fuente', 'referencia', 'ref', 'artículo', 'articulo') ||
+        b.encabezado ||
+        b.tituloSeccion,
     })
   }
 
@@ -336,7 +482,9 @@ export function parsearBanco(texto: string): ResultadoBanco {
   // Es la única pista fiable de que falta algo, así que se avisa.
   for (const clave of bloquesClave) {
     const servidas = bloques.filter(
-      (b) => claveParaPregunta(bloquesClave, b.linea, b.numero) !== null && esSuBloque(bloquesClave, b, clave),
+      (b) =>
+        claveParaPregunta(bloquesClave, b.linea, b.numero, b.seccion) !== null &&
+        esSuBloque(bloquesClave, b, clave),
     ).length
     if (clave.entradas.size > servidas) {
       incidencias.push(
@@ -355,6 +503,12 @@ export function parsearBanco(texto: string): ResultadoBanco {
 
 /** ¿Es `clave` el solucionario que le toca a la pregunta `b`? */
 function esSuBloque(bloques: BloqueClave[], b: Bloque, clave: BloqueClave): boolean {
+  if (b.seccion) {
+    const porTitulo = bloques.filter((x) => titulosCasan(x.seccion, b.seccion))
+    if (porTitulo.length === 1) return porTitulo[0] === clave
+    if (porTitulo.length > 1) return false
+    if (bloques.some((x) => x.seccion)) return false
+  }
   const siguiente = bloques.find((x) => x.linea > b.linea)
   return siguiente ? siguiente === clave : bloques.length === 1 && bloques[0] === clave
 }
@@ -382,7 +536,7 @@ function resolverCorrecta(b: Bloque, opciones: string[], claves: BloqueClave[]):
 
   // 4. Solucionario suelto, el que corresponda a la posición de la pregunta.
   if (!valor) {
-    const porClave = claveParaPregunta(claves, b.linea, b.numero)
+    const porClave = claveParaPregunta(claves, b.linea, b.numero, b.seccion)
     return porClave !== null && porClave < opciones.length ? porClave : -1
   }
 

@@ -226,14 +226,15 @@ export function Test() {
         </div>
       )}
 
-      <div className="sticky bottom-3">
+      {/* Barra opaca: los enunciados largos pasaban por detrás del botón. */}
+      <div className="sticky bottom-0 -mx-4 border-t border-[var(--color-borde)] bg-[var(--color-lienzo)]/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
         <button
           disabled={!respondida}
           onClick={() => {
             setIndice((i) => i + 1)
             setElegida(null)
           }}
-          className="w-full rounded-2xl bg-[var(--color-acento)] py-3.5 font-medium text-white shadow-lg disabled:opacity-30"
+          className="w-full rounded-2xl bg-[var(--color-acento)] py-3.5 font-medium text-white disabled:opacity-30"
         >
           {indice + 1 === cola.length ? 'Ver resultado' : 'Siguiente'}
         </button>

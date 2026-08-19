@@ -438,8 +438,9 @@ function PanelAnalisis({
               <p className="text-xs text-slate-400">
                 {analisis.solucionarios.length} solucionario
                 {analisis.solucionarios.length === 1 ? '' : 's'} aparte (
-                {analisis.solucionarios.join(' + ')} respuestas). Cada uno se aplica solo a las
-                preguntas que lo preceden, para que un tema no herede las respuestas de otro.
+                {analisis.solucionarios.join(' + ')} respuestas). Cada uno se empareja con su
+                cuestionario por el título, así que da igual que estén a treinta páginas de
+                distancia o que la numeración se reinicie en cada uno.
               </p>
             )}
             <p className="text-xs text-slate-400">
