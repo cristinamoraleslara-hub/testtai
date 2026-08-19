@@ -6,19 +6,46 @@ export function Acceso() {
   const [estado, setEstado] = useState<'idle' | 'enviando' | 'enviado' | 'error'>('idle')
   const [mensaje, setMensaje] = useState('')
 
+  /**
+   * El plan gratuito de Supabase pausa el proyecto tras unos días sin uso, y
+   * entonces la petición falla en red con un escueto «Failed to fetch». Merece
+   * la pena traducirlo a algo accionable en vez de soltar el error crudo.
+   */
+  function explicar(error: { message: string; status?: number }): string {
+    const m = error.message.toLowerCase()
+    if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed')) {
+      return 'No se ha podido contactar con la base de datos. Si el proyecto de Supabase lleva días sin usarse, estará pausado: entra en supabase.com y pulsa "Restore". Comprueba también que VITE_SUPABASE_URL es correcta.'
+    }
+    if (error.status === 429 || m.includes('rate limit') || m.includes('security purposes')) {
+      return 'Demasiados intentos seguidos. Espera un minuto y vuelve a pedir el enlace.'
+    }
+    if (m.includes('invalid') && m.includes('email')) {
+      return 'Ese correo no parece válido.'
+    }
+    if (m.includes('redirect')) {
+      return 'La URL de esta web no está autorizada en Supabase. Añádela en Authentication → URL Configuration → Redirect URLs.'
+    }
+    return error.message
+  }
+
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
     if (!supabase) return
     setEstado('enviando')
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
-    })
-    if (error) {
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { emailRedirectTo: window.location.origin },
+      })
+      if (error) {
+        setEstado('error')
+        setMensaje(explicar(error))
+      } else {
+        setEstado('enviado')
+      }
+    } catch (e) {
       setEstado('error')
-      setMensaje(error.message)
-    } else {
-      setEstado('enviado')
+      setMensaje(explicar({ message: e instanceof Error ? e.message : String(e) }))
     }
   }
 
