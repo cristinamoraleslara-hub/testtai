@@ -20,81 +20,17 @@ npm run dev
 Abre http://localhost:5173. Ve a **Contenido → Elegir archivo** y elige
 `data/ejemplo.pack.json` para tener preguntas con las que jugar.
 
-## 2. Base de datos gratis (Supabase)
+## 2. Desplegarla en internet con progreso sincronizado
 
-Solo si quieres que el progreso te siga entre dispositivos.
+Guía paso a paso, con el orden que importa: **[DESPLIEGUE.md](DESPLIEGUE.md)**.
 
-1. Crea un proyecto en https://supabase.com (plan Free: 500 MB de Postgres, sin tarjeta).
-2. Abre **SQL Editor → New query**, pega el contenido de [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**.
-   Es idempotente: puedes volver a lanzarlo cuando quieras sin perder progreso.
-3. En **Authentication → Providers** deja activado *Email*, y en **URL Configuration**
-   añade la URL de tu web a *Site URL* y a *Redirect URLs*.
-4. Copia **Project URL** y **anon public key** de *Project Settings → API* a un `.env.local`:
-
-```bash
-cp .env.example .env.local
-```
-
-```
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
-```
-
-La `anon key` es pública por diseño; lo que protege los datos son las políticas RLS
-del esquema, que atan progreso y sesiones a `auth.uid()`.
-
-## 3. Desplegar en producción hoy
-
-```bash
-git init
-git add -A
-git commit -m "TAI Tests"
-```
-
-Crea el repo y súbelo (privado):
-
-```bash
-gh repo create tai-tests --private --source=. --push
-```
-
-### Opción A — Vercel (recomendada)
-
-```bash
-npx vercel login
-npx vercel --prod
-```
-
-Vercel detecta Vite solo. Si usas Supabase, añade las dos variables antes de publicar:
-
-```bash
-npx vercel env add VITE_SUPABASE_URL production
-npx vercel env add VITE_SUPABASE_ANON_KEY production
-npx vercel --prod --force
-```
-
-### Opción B — Netlify
-
-```bash
-npx netlify-cli login
-npx netlify deploy --build --prod
-```
-
-`netlify.toml` ya trae el comando de build, la carpeta `dist` y el redirect de SPA.
-
-### Opción C — Cloudflare Pages
-
-```bash
-npm run build
-npx wrangler pages deploy dist --project-name tai-tests
-```
-
-En los tres casos, conectando el repo de GitHub desde su panel se despliega solo en
-cada `git push`. Después, abre la web en el móvil y usa **Compartir → Añadir a la
-pantalla de inicio**: el manifest la instala como app a pantalla completa.
+Resumen: Supabase (base de datos, plan Free) + Vercel (hosting, plan Hobby). Coste 0 €,
+sin tarjeta. Sin Supabase la app funciona igual, pero el progreso se queda en cada
+dispositivo por separado.
 
 ---
 
-## 4. Cargar contenido
+## 3. Cargar contenido
 
 Formatos aceptados: **Markdown** (`.md`), texto (`.txt`), **PDF** y packs `.json`.
 
@@ -191,7 +127,7 @@ su enunciado, así que actualiza en lugar de duplicar.
 
 ## Dónde se guardan tus datos
 
-Depende de si has configurado Supabase (paso 2):
+Depende de si has configurado Supabase:
 
 | | Sin Supabase | Con Supabase |
 |---|---|---|
@@ -222,7 +158,7 @@ existían y conserva su progreso.
 
 ## Abrirlo en el móvil
 
-Una vez desplegado (paso 3), abre en el navegador del móvil la URL que te dé Vercel
+Una vez desplegado, abre en el navegador del móvil la URL que te dé Vercel
 (algo como `https://tai-tests.vercel.app`) y añádela a la pantalla de inicio:
 
 - **iPhone (Safari)**: botón Compartir → *Añadir a pantalla de inicio*.
