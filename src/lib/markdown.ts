@@ -47,6 +47,10 @@ export function esTituloSeccion(linea: string): boolean {
   if (ENCABEZADO.test(t)) return true
   if (/[?]\s*$/.test(t)) return false
   if (esOpcion(t)) return false // una opción nunca es un título de sección
+  // Una frase con punto final es una instrucción, no un título: «NO SEPARE EL
+  // EJEMPLAR PARA EL INTERESADO DE LA HOJA DE EXAMEN.» lleva la palabra
+  // «examen» pero no encabeza nada.
+  if (/\.\s*$/.test(t) && t.split(/\s+/).length > 6) return false
   const sinNumero = t.replace(/^\d+\s*[.\-)]{1,2}\s*/, '')
   if (!PALABRA_SECCION.test(sinNumero)) return false
   // Los títulos de estos cuadernos van en mayúsculas; así no se confunde
@@ -82,6 +86,27 @@ const CITA = /^\s*>\s?(.*)$/
 
 const esOpcion = (l: string) => OPCION_CASILLA.test(l) || OPCION_TEST.test(l)
 
+/** Marcador de opción dentro de una línea: « a) », « b. »… */
+const MARCADOR_OPCION = /(?:^|\s)([a-eA-E])\s*[).\]]\s+(?=\S)/g
+
+/**
+ * Los exámenes maquetados a dos columnas meten dos opciones en la misma línea:
+ * «a) EBOCA b) BECADAS». Sin separarlas, la pregunta se queda en dos opciones
+ * y se descarta entera. Solo se parte si los marcadores van en letras
+ * consecutivas, para no romper una opción que mencione «... b) ...» por dentro.
+ */
+export function dividirOpciones(linea: string): string[] {
+  const marcas = [...linea.matchAll(MARCADOR_OPCION)]
+  if (marcas.length < 2) return [linea]
+  const letras = marcas.map((m) => m[1].toLowerCase().charCodeAt(0))
+  if (!letras.every((c, k) => k === 0 || c === letras[k - 1] + 1)) return [linea]
+  return marcas.map((m, k) => {
+    const desde = m.index ?? 0
+    const hasta = k + 1 < marcas.length ? (marcas[k + 1].index ?? linea.length) : linea.length
+    return linea.slice(desde, hasta).trim()
+  })
+}
+
 /** Quita «a)», «- [x]», «**c.**» y deja el texto de la opción. */
 function textoOpcion(linea: string): string {
   const casilla = linea.match(OPCION_CASILLA)
@@ -112,19 +137,72 @@ type Bloque = {
   seccion: string
   /** Título de sección tal cual, para citarlo como fuente. */
   tituloSeccion: string
+  /** Cuántas plantillas de respuestas se han visto antes que ella. */
+  examen: number
+  /** Tramo dentro del examen; se calcula tras trocear, por los reinicios. */
+  orden: number
 }
 
 const CABECERA_SOLUCIONES =
   /^\s*(?:>\s*)?(?:#{1,6}\s*)?\**\s*(soluciones?|solucionario|respuestas|plantilla|clave)\b/i
 
+/**
+ * Igual que la anterior pero para líneas sueltas de texto corrido, donde hay
+ * que hilar fino: en las instrucciones de un examen se lee «las respuestas en
+ * blanco no penalizan», y eso no abre ningún solucionario.
+ */
+const CABECERA_SOLUCIONES_ESTRICTA =
+  /^\s*(?:>\s*)?(?:#{1,6}\s*)?\**\s*(soluciones?|solucionario|respuestas\s+correctas|plantilla(\s+de\s+respuestas)?|hoja\s+de\s+respuestas|clave(\s+de\s+correcci[oó]n)?)\b\s*\**\s*[:.\-–]?\s*$/i
+
+/**
+ * ¿Esta línea abre una plantilla de respuestas? Preguntas y solucionarios se
+ * cuentan por el mismo criterio a propósito: si cada lado contase los exámenes
+ * a su manera, se desincronizarían y las respuestas irían a otro examen.
+ */
+export function abreSolucionario(linea: string): boolean {
+  return esTituloSeccion(linea)
+    ? CABECERA_SOLUCIONES.test(linea.trim().replace(/^\d+\s*[.\-)]{1,2}\s*/, ''))
+    : CABECERA_SOLUCIONES_ESTRICTA.test(linea)
+}
+
 /** «1-b», «1. b», «1) b», «1 → b», «| 1 | b |»: pareja número-letra. */
 const PAREJAS = /(\d{1,3})\s*[.):\-–=|→]{0,2}\s*\|?\s*([a-eA-E])(?![a-zA-Z])/g
 
-/** Un solucionario suelto, con dónde está y a qué sección pertenece. */
+/**
+ * Una línea de solucionario no contiene nada más que parejas (y, como mucho,
+ * un «ANULADA» o los palotes de una tabla). Exigirlo es lo que impide que un
+ * enunciado como «los Artículos 15 a 29 de la Constitución» se cuele como si
+ * dijera que la respuesta 15 es la a).
+ */
+const SOLO_PAREJAS =
+  /^[\s|]*(?:\d{1,3}\s*[.):\-–=|→]{0,2}\s*(?:[a-eA-E]\b|ANULADA|X)[\s,;|-]*)+$/i
+
+/** Encabezado o pie de página repetido en cada hoja de un PDF. */
+const LINEA_PAGINA = /P[áa]gina\s+\d+\s+de\s+\d+/i
+
+/**
+ * Esa misma cabecera suele identificar el examen mejor que ningún título:
+ * «2024 - TAI-L – MODELO A Página 1 de 14». Se aprovecha como fuente, que es
+ * más útil al estudiar que el rótulo de la plantilla de respuestas.
+ */
+function etiquetaDePagina(linea: string): string {
+  const antes = linea.split(/P[áa]gina\s+\d+\s+de\s+\d+/i)[0].trim()
+  return antes.length >= 4 && antes.length <= 60 ? antes : ''
+}
+
+/**
+ * Un tramo de solucionario con numeración continua. Una misma plantilla puede
+ * traer varios: «Primera parte 1-80», «Preguntas de reserva 1-5», «Supuesto I
+ * 1-20»… Cada reinicio de la numeración abre un tramo nuevo.
+ */
 export type BloqueClave = {
   linea: number
   /** Discriminador del título de su sección, para casarlo con las preguntas. */
   seccion: string
+  /** Cuántas plantillas se han abierto antes que esta (1, 2, 3…). */
+  examen: number
+  /** Posición del tramo dentro de su plantilla (0, 1, 2…). */
+  orden: number
   entradas: Map<number, number>
 }
 
@@ -138,46 +216,101 @@ export type BloqueClave = {
  */
 export function extraerBloquesClave(lineas: string[]): BloqueClave[] {
   const bloques: BloqueClave[] = []
-  const porSeccion = new Map<string, BloqueClave>()
   let seccion = ''
   let enSolucionario = false
+  let examen = 0
+  let orden = 0
+  let ultimoNumero = 0
+
+  /** Tramos del examen en curso, por columna. */
+  let columnas: BloqueClave[] = []
+
+  const tramo = (col: number, i: number): BloqueClave => {
+    if (!columnas[col]) {
+      columnas[col] = { linea: i, seccion, examen, orden: col, entradas: new Map() }
+      bloques.push(columnas[col])
+    }
+    return columnas[col]
+  }
 
   for (let i = 0; i < lineas.length; i++) {
     const linea = lineas[i]
 
-    if (esTituloSeccion(linea)) {
-      const titulo = linea.trim()
-      // Un título con «respuestas/soluciones» abre solucionario; el resto lo cierra.
-      enSolucionario = CABECERA_SOLUCIONES.test(titulo.replace(/^\d+\s*[.\-)]{1,2}\s*/, ''))
-      const d = discriminador(titulo)
-      if (d) seccion = d
-    } else if (CABECERA_SOLUCIONES.test(linea)) {
+    if (abreSolucionario(linea)) {
+      // Cada plantilla nueva abre un examen: sus preguntas vendrán detrás.
+      examen++
+      orden = 0
+      ultimoNumero = 0 // si no, el «1» de la plantilla nueva parece un reinicio
+      columnas = []
       enSolucionario = true
+    } else if (esTituloSeccion(linea) || esOpcion(linea)) {
+      // Donde empiezan las opciones se acabó la plantilla: sin este corte, un
+      // enunciado como «los Artículos 15 a 29» se leería como «15 → a».
+      enSolucionario = false
     }
 
-    if (LINEA_INDICE.test(linea)) continue // el índice del cuaderno no es clave
+    if (esTituloSeccion(linea)) {
+      const d = discriminador(linea.trim())
+      if (d) seccion = d
+    }
+
+    if (LINEA_INDICE.test(linea) || LINEA_PAGINA.test(linea)) continue
 
     const parejas = [...linea.matchAll(PAREJAS)]
+    if (!parejas.length) continue
     // Tres o más parejas en una línea son inequívocas aunque no haya cabecera;
-    // una sola solo se acepta dentro de un bloque de soluciones.
-    if (parejas.length < 3 && !(enSolucionario && parejas.length >= 1)) continue
+    // dentro de una plantilla basta una, pero la línea no puede traer nada más.
+    if (!SOLO_PAREJAS.test(linea)) continue
+    if (!enSolucionario && parejas.length < 3) continue
 
-    const idSeccion = seccion || `pos:${i}`
-    let bloque = porSeccion.get(idSeccion)
-    if (!bloque) {
-      bloque = { linea: i, seccion, entradas: new Map() }
-      porSeccion.set(idSeccion, bloque)
-      bloques.push(bloque)
-    }
-    for (const [, num, letra] of parejas) {
-      const idx = LETRAS.indexOf(letra.toLowerCase())
-      // La primera respuesta gana: si un número se repite dentro de la misma
-      // sección es ruido, no una corrección.
-      if (idx >= 0 && !bloque.entradas.has(Number(num))) bloque.entradas.set(Number(num), idx)
-    }
+    const numeros = parejas.map((p) => Number(p[1]))
+    // Una plantilla a varias columnas pone en la misma fila la respuesta de
+    // cada bloque: «1. C  1. A  1. A  1. A». Se reconoce porque los números no
+    // avanzan dentro de la línea, y entonces cada posición es una columna.
+    const enColumnas = numeros.length > 1 && !numeros.every((n, k) => k === 0 || n > numeros[k - 1])
+
+    parejas.forEach((p, col) => {
+      const idx = LETRAS.indexOf(p[2].toLowerCase())
+      if (idx < 0) return
+      const n = Number(p[1])
+      if (enColumnas) {
+        tramo(col, i).entradas.set(n, idx)
+        ultimoNumero = 0
+        return
+      }
+      // Numeración corrida: cada reinicio abre el tramo siguiente. Una misma
+      // plantilla encadena «Primera parte 1-80», «reserva 1-5», «Supuesto I»…
+      if (n <= ultimoNumero) orden++
+      const destino = tramo(orden, i)
+      if (!destino.entradas.has(n)) destino.entradas.set(n, idx)
+      ultimoNumero = n
+    })
   }
 
   return bloques.filter((b) => b.entradas.size > 0)
+}
+
+/**
+ * Numera los tramos de preguntas igual que se numeran los del solucionario:
+ * cada vez que la numeración se reinicia empieza un tramo nuevo dentro del
+ * mismo examen. Así el tramo 2 de las preguntas casa con el tramo 2 de su
+ * plantilla, sin depender de que los rótulos se llamen igual.
+ */
+function numerarTramos(bloques: Bloque[]): void {
+  let examenActual = -1
+  let orden = 0
+  let ultimo = 0
+  for (const b of bloques) {
+    if (b.examen !== examenActual) {
+      examenActual = b.examen
+      orden = 0
+      ultimo = 0
+    } else if (b.numero !== null && b.numero <= ultimo) {
+      orden++
+    }
+    b.orden = orden
+    if (b.numero !== null) ultimo = b.numero
+  }
 }
 
 /**
@@ -214,14 +347,32 @@ export function claveParaPregunta(
   lineaPregunta: number,
   numero: number | null,
   seccionPregunta = '',
+  examen = 0,
+  orden = 0,
 ): number | null {
   if (numero === null || !bloques.length) return null
 
-  if (seccionPregunta) {
-    const porTitulo = bloques.filter((b) => titulosCasan(b.seccion, seccionPregunta))
-    if (porTitulo.length === 1) return porTitulo[0].entradas.get(numero) ?? null
-    if (porTitulo.length > 1) return null // ambiguo: mejor no adivinar
+  // 1. Título propio. Es lo más específico cuando existe: distingue
+  //    «Soluciones tema 1» de «Soluciones tema 2» aunque estén intercaladas.
+  const porTitulo = seccionPregunta
+    ? bloques.filter((b) => titulosCasan(b.seccion, seccionPregunta))
+    : []
+  if (porTitulo.length === 1) return porTitulo[0].entradas.get(numero) ?? null
+
+  // 2. Examen y tramo. Entra cuando los títulos no desempatan, que es el caso
+  //    de los exámenes oficiales: todas las plantillas se llaman igual, van
+  //    DELANTE de sus preguntas y encadenan varios tramos («Primera parte»,
+  //    «reserva», «Supuesto I»…) con la numeración reiniciándose en cada uno.
+  if (examen > 0) {
+    const delTramo = bloques.filter((b) => b.examen === examen && b.orden === orden)
+    if (delTramo.length === 1) return delTramo[0].entradas.get(numero) ?? null
+    if (delTramo.length > 1) return null
+    // Hay plantillas de este examen pero ninguna encaja con el tramo: no se
+    // rebusca en otras, que serían de otra parte del examen.
+    if (bloques.some((b) => b.examen === examen)) return null
   }
+
+  if (porTitulo.length > 1) return null // ambiguo: mejor no adivinar
 
   // Sin títulos utilizables, vale la posición… salvo que haya varias tandas de
   // preguntas y todas las respuestas al final, donde la posición engaña.
@@ -248,6 +399,8 @@ function trocearBloques(texto: string): Bloque[] {
 
   let seccion = ''
   let tituloSeccion = ''
+  let etiquetaExamen = ''
+  let examen = 0
 
   for (let i = 0; i < lineas.length; i++) {
     const enc = lineas[i].match(ENCABEZADO)
@@ -256,11 +409,23 @@ function trocearBloques(texto: string): Bloque[] {
       pila[nivel] = limpiarMarkdown(enc[2])
       for (let n = nivel + 1; n < pila.length; n++) pila[n] = ''
     }
+    if (abreSolucionario(lineas[i])) {
+      examen++
+      etiquetaExamen = '' // cada examen trae la suya, si es que la trae
+    }
+    if (LINEA_PAGINA.test(lineas[i])) {
+      const e = etiquetaDePagina(lineas[i])
+      if (e) etiquetaExamen = e
+      continue
+    }
     if (esTituloSeccion(lineas[i])) {
       const d = discriminador(lineas[i])
       if (d) {
         seccion = d
-        tituloSeccion = limpiarMarkdown(lineas[i]).replace(/^\d+\s*[.\-)]{1,2}\s*/, '')
+        // El rótulo de una plantilla no describe las preguntas: no es fuente.
+        tituloSeccion = abreSolucionario(lineas[i])
+          ? ''
+          : limpiarMarkdown(lineas[i]).replace(/^\d+\s*[.\-)]{1,2}\s*/, '')
       }
     }
     if (LINEA_INDICE.test(lineas[i])) continue
@@ -295,7 +460,7 @@ function trocearBloques(texto: string): Bloque[] {
         break
       }
       if (esOpcion(l)) {
-        lineasOpcion.push(l)
+        for (const parte of dividirOpciones(l)) lineasOpcion.push(parte)
         j++
         continue
       }
@@ -370,7 +535,16 @@ function trocearBloques(texto: string): Bloque[] {
       break
     }
 
-    bloques.push({ enunciado, numero, linea: i, lineasOpcion, meta, citas, encabezado, seccion, tituloSeccion })
+    bloques.push({ enunciado, numero, linea: i, lineasOpcion, meta,
+      citas,
+      encabezado,
+      seccion,
+      // La cabecera de página («2024 - TAI-L – MODELO A») identifica el examen
+      // mejor que cualquier rótulo suelto en mayúsculas del cuerpo del PDF.
+      tituloSeccion: etiquetaExamen || tituloSeccion || (examen > 0 ? `Examen ${examen}` : ''),
+      examen,
+      orden: 0,
+    })
     usadaHasta = k - 1
     i = k - 1
   }
@@ -381,12 +555,19 @@ function trocearBloques(texto: string): Bloque[] {
 /** ¿Es un banco de preguntas o material del que hay que generarlas? */
 export function detectarTipo(texto: string): Deteccion {
   const bloques = trocearBloques(texto)
-  const lineasUtiles = quitarComentarios(texto).split('\n').filter((l) => l.trim()).length
-  const lineasEnBloques = bloques.reduce(
-    (n, b) => n + b.lineasOpcion.length + b.meta.length + 1,
-    0,
-  )
-  const densidad = lineasUtiles ? lineasEnBloques / lineasUtiles : 0
+  numerarTramos(bloques)
+  // Las líneas de solucionario («1. b», una por respuesta) son parte del
+  // aparato de preguntas, no relleno: en un examen oficial con la plantilla
+  // delante hay cientos, y contarlas como texto ajeno hundía la densidad hasta
+  // hacer pasar por temario un documento que solo tiene preguntas.
+  const utiles = quitarComentarios(texto)
+    .split('\n')
+    .filter((l) => l.trim())
+  const lineasDeClave = utiles.filter((l) => SOLO_PAREJAS.test(l)).length
+  const lineasUtiles = utiles.length
+  const lineasEnBloques =
+    bloques.reduce((n, b) => n + b.lineasOpcion.length + b.meta.length + 1, 0) + lineasDeClave
+  const densidad = lineasUtiles ? Math.min(1, lineasEnBloques / lineasUtiles) : 0
 
   if (bloques.length === 0) {
     return {
@@ -432,6 +613,7 @@ export function parsearBanco(texto: string): ResultadoBanco {
   const lineas = quitarComentarios(texto).replace(/\r\n?/g, '\n').split('\n')
   const bloquesClave = extraerBloquesClave(lineas)
   const bloques = trocearBloques(texto)
+  numerarTramos(bloques)
 
   for (const b of bloques) {
     // Ubicar la pregunta (cuestionario y número) hace el aviso accionable:
@@ -483,7 +665,7 @@ export function parsearBanco(texto: string): ResultadoBanco {
   for (const clave of bloquesClave) {
     const servidas = bloques.filter(
       (b) =>
-        claveParaPregunta(bloquesClave, b.linea, b.numero, b.seccion) !== null &&
+        claveParaPregunta(bloquesClave, b.linea, b.numero, b.seccion, b.examen, b.orden) !== null &&
         esSuBloque(bloquesClave, b, clave),
     ).length
     if (clave.entradas.size > servidas) {
@@ -503,6 +685,15 @@ export function parsearBanco(texto: string): ResultadoBanco {
 
 /** ¿Es `clave` el solucionario que le toca a la pregunta `b`? */
 function esSuBloque(bloques: BloqueClave[], b: Bloque, clave: BloqueClave): boolean {
+  if (b.seccion) {
+    const porT = bloques.filter((x) => titulosCasan(x.seccion, b.seccion))
+    if (porT.length === 1) return porT[0] === clave
+  }
+  if (b.examen > 0) {
+    const delTramo = bloques.filter((x) => x.examen === b.examen && x.orden === b.orden)
+    if (delTramo.length === 1) return delTramo[0] === clave
+    if (bloques.some((x) => x.examen === b.examen)) return false
+  }
   if (b.seccion) {
     const porTitulo = bloques.filter((x) => titulosCasan(x.seccion, b.seccion))
     if (porTitulo.length === 1) return porTitulo[0] === clave
@@ -536,7 +727,7 @@ function resolverCorrecta(b: Bloque, opciones: string[], claves: BloqueClave[]):
 
   // 4. Solucionario suelto, el que corresponda a la posición de la pregunta.
   if (!valor) {
-    const porClave = claveParaPregunta(claves, b.linea, b.numero, b.seccion)
+    const porClave = claveParaPregunta(claves, b.linea, b.numero, b.seccion, b.examen, b.orden)
     return porClave !== null && porClave < opciones.length ? porClave : -1
   }
 
