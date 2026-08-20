@@ -126,9 +126,22 @@ export function Estadisticas() {
                 key={p.id}
                 className="rounded-xl border border-[var(--color-borde)] bg-[var(--color-panel)] p-3 text-sm"
               >
-                <p className="text-slate-200">{p.enunciado}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {p.fuente ? `${p.fuente} · ` : ''}
+                {p.fuente && (
+                  <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                    {p.fuente}
+                  </p>
+                )}
+                <p className="leading-relaxed text-slate-200">{p.enunciado}</p>
+                <p className="mt-2 flex gap-2 text-[var(--color-acierto)]">
+                  <span aria-hidden>✓</span>
+                  <span>{p.opciones[p.correcta]}</span>
+                </p>
+                {p.explicacion && (
+                  <p className="mt-2 border-t border-[var(--color-borde)] pt-2 text-xs leading-relaxed text-slate-400">
+                    {p.explicacion}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500">
                   {pr!.fallos} fallo{pr!.fallos === 1 ? '' : 's'} · {pr!.aciertos} acierto
                   {pr!.aciertos === 1 ? '' : 's'}
                 </p>
