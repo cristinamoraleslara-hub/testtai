@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDatos } from '../hooks/useDatos'
 import { MetaDiaria } from '../components/MetaDiaria'
-import { NIVEL_DOMINADA, resumen, type Modo } from '../lib/srs'
+import { NIVEL_DOMINADA, clasificar, resumen, type Modo } from '../lib/srs'
 
 const MODOS: { id: Modo; texto: string; ayuda: string }[] = [
-  { id: 'mixto', texto: 'Mixto', ayuda: 'Falladas primero, luego nuevas y repasos' },
+  { id: 'mixto', texto: 'Mixto', ayuda: 'Falladas, luego repasos que tocan hoy, luego nuevas' },
   { id: 'falladas', texto: 'Solo falladas', ayuda: 'Repesca de lo que no dominas' },
+  { id: 'repaso', texto: 'Repaso', ayuda: 'Acertadas a las que les toca volver' },
   { id: 'nuevas', texto: 'Solo nuevas', ayuda: 'Preguntas que aún no has visto' },
 ]
 
@@ -27,12 +28,11 @@ export function Home() {
   const stats = useMemo(() => resumen(seleccionadas, progreso), [seleccionadas, progreso])
 
   const disponibles = useMemo(() => {
-    if (modo === 'falladas')
-      return seleccionadas.filter((p) => {
-        const pr = progreso[p.id]
-        return pr && (pr.ultimo_resultado === false || pr.nivel === 0)
-      }).length
-    if (modo === 'nuevas') return seleccionadas.filter((p) => !progreso[p.id]).length
+    const { falladas, nuevas, repasos, descansando } = clasificar(seleccionadas, progreso)
+    if (modo === 'falladas') return falladas.length
+    if (modo === 'nuevas') return nuevas.length
+    // En repaso se adelantan las que aún no tocan si hoy no hay ninguna.
+    if (modo === 'repaso') return repasos.length + descansando.length
     return seleccionadas.length
   }, [seleccionadas, progreso, modo])
 
@@ -90,7 +90,7 @@ export function Home() {
 
       <section>
         <h2 className="mb-2 text-sm font-medium text-slate-300">Modo</h2>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {MODOS.map((m) => (
             <button
               key={m.id}
@@ -143,9 +143,14 @@ export function Home() {
       </button>
 
       <p className="text-center text-xs text-slate-500">
-        {stats.dominadas} dominadas · {stats.pendientes} en repaso · {stats.sinVer} sin ver
+        <span className="text-[var(--color-fallo)]">{stats.falladas} falladas</span>
+        {' · '}
+        <span className="text-[var(--color-acento)]">{stats.repasoHoy} tocan hoy</span>
+        {' · '}
+        {stats.sinVer} sin ver · {stats.dominadas} dominadas
         <br />
-        Una pregunta se marca como dominada tras {NIVEL_DOMINADA} aciertos espaciados.
+        Lo que aciertas vuelve a los {[1, 2, 4, 8, 16].join(', ')} días; si lo fallas, vuelve hoy
+        mismo. Se marca como dominada tras {NIVEL_DOMINADA} aciertos espaciados.
       </p>
     </div>
   )

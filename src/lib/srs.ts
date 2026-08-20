@@ -41,7 +41,7 @@ export function aplicarRespuesta(previo: Progreso, acierto: boolean): Progreso {
   }
 }
 
-export type Modo = 'mixto' | 'falladas' | 'nuevas'
+export type Modo = 'mixto' | 'falladas' | 'nuevas' | 'repaso'
 
 const barajar = <T,>(xs: T[]): T[] => {
   const a = [...xs]
@@ -53,16 +53,12 @@ const barajar = <T,>(xs: T[]): T[] => {
 }
 
 /**
- * Ordena el pool de una sesión: primero lo fallado y vencido, luego lo nuevo,
- * y por último los repasos programados. Las dominadas cuya fecha aún no ha
- * llegado quedan fuera salvo que no haya nada más que preguntar.
+ * Reparte las preguntas en los cuatro estados de la caja de Leitner.
+ *
+ * «Repaso» son las que ya has acertado alguna vez y les toca hoy; «descansando»
+ * las acertadas cuya fecha aún no ha llegado.
  */
-export function construirSesion(
-  preguntas: Pregunta[],
-  progreso: Record<string, Progreso>,
-  modo: Modo,
-  limite: number,
-): Pregunta[] {
+export function clasificar(preguntas: Pregunta[], progreso: Record<string, Progreso>) {
   const fecha = hoy()
   const falladas: Pregunta[] = []
   const nuevas: Pregunta[] = []
@@ -76,13 +72,42 @@ export function construirSesion(
     else if (pr.proxima_revision <= fecha) repasos.push(p)
     else descansando.push(p)
   }
+  return { falladas, nuevas, repasos, descansando }
+}
+
+/**
+ * Ordena el pool de una sesión.
+ *
+ * En «mixto» los repasos vencidos van ANTES que las preguntas nuevas, y no es
+ * un detalle: con un banco de varios cientos de preguntas, las nuevas llenaban
+ * la tanda entera y lo ya acertado no volvía a salir nunca, con lo que la
+ * repetición espaciada dejaba de existir. Un repaso vencido caduca; una
+ * pregunta nueva puede esperar a mañana.
+ */
+export function construirSesion(
+  preguntas: Pregunta[],
+  progreso: Record<string, Progreso>,
+  modo: Modo,
+  limite: number,
+): Pregunta[] {
+  const { falladas, nuevas, repasos, descansando } = clasificar(preguntas, progreso)
+
+  // Por fecha: primero lo que lleva más tiempo esperando.
+  const porAntiguedad = (xs: Pregunta[]) =>
+    [...xs].sort((a, b) =>
+      (progreso[a.id]?.proxima_revision ?? '').localeCompare(progreso[b.id]?.proxima_revision ?? ''),
+    )
 
   const seleccion =
     modo === 'falladas'
-      ? [...barajar(falladas)]
+      ? barajar(falladas)
       : modo === 'nuevas'
-        ? [...barajar(nuevas)]
-        : [...barajar(falladas), ...barajar(nuevas), ...barajar(repasos), ...barajar(descansando)]
+        ? barajar(nuevas)
+        : modo === 'repaso'
+          ? // Si hoy no toca ninguna, se adelantan las más próximas en vez de
+            // dejarte con la pantalla vacía cuando quieres repasar.
+            [...barajar(repasos), ...porAntiguedad(descansando)]
+          : [...barajar(falladas), ...barajar(repasos), ...barajar(nuevas), ...barajar(descansando)]
 
   return seleccion.slice(0, limite)
 }
@@ -97,5 +122,14 @@ export function resumen(preguntas: Pregunta[], progreso: Record<string, Progreso
     else if (pr.nivel >= NIVEL_DOMINADA) dominadas++
     else pendientes++
   }
-  return { total: preguntas.length, dominadas, pendientes, sinVer }
+  const { falladas, repasos } = clasificar(preguntas, progreso)
+  return {
+    total: preguntas.length,
+    dominadas,
+    pendientes,
+    sinVer,
+    falladas: falladas.length,
+    /** Acertadas a las que hoy les toca volver a salir. */
+    repasoHoy: repasos.length,
+  }
 }

@@ -4,7 +4,7 @@ App de tests de estudio: móvil y escritorio, con repetición espaciada, feedbac
 y meta diaria de 1 hora. Diseñada para costar **0 €/mes**.
 
 - **Frontend**: Vite + React + TypeScript + Tailwind → estático, cabe en cualquier free tier.
-- **Backend**: Supabase (PostgreSQL + auth por enlace mágico). Opcional.
+- **Backend**: Supabase (PostgreSQL + acceso con correo y contraseña). Opcional.
 - **Sin Supabase la app funciona igual**, guardando todo en el navegador del dispositivo.
   Supabase solo añade sincronizar el progreso entre el móvil y el ordenador.
 
@@ -82,10 +82,12 @@ cuestionario de su solucionario. Lo importante es **cómo se emparejan cuando ha
 solucionarios**, porque muchos cuadernos reinician la numeración en cada tema y entonces
 el «1» del tema 2 choca con el «1» del tema 1.
 
-La regla es: **cada solucionario responde a las preguntas que lo preceden**, hasta el
-solucionario anterior. Si solo hay uno en todo el documento, vale para todas. Si una
-pregunta no encaja con ninguno, se descarta con aviso en lugar de asignarle una respuesta
-de otro tema.
+Se emparejan por este orden: **por título** («CUESTIONARIO 2008» con «RESPUESTAS
+CUESTIONARIO 2008»); si los títulos no desempatan, **por examen y tramo**, que es lo que
+resuelve los exámenes oficiales donde la plantilla va DELANTE y encadena varios tramos
+con la numeración reiniciándose («Primera parte» 1-80, «reserva» 1-5, «Supuesto I» 1-20);
+y en último lugar por posición. Si una pregunta no encaja con ninguno, se descarta con
+aviso en lugar de asignarle la respuesta de otro examen.
 
 Antes de importar verás el recuento —cuántas preguntas se han encontrado, cuántas entran
 y cuántas quedan fuera— y cuántas respuestas trae cada solucionario. **Si un solucionario
@@ -121,7 +123,9 @@ clave de Anthropic, que se guarda solo en ese navegador.
    El resultado te informa de la cobertura final.
 
 Reimportar el mismo archivo **no pierde progreso**: el id de cada pregunta es un hash de
-su enunciado, así que actualiza en lugar de duplicar.
+su enunciado y sus opciones, así que actualiza en lugar de duplicar. Van las opciones y no
+solo el enunciado porque en los exámenes oficiales se repiten enunciados perezosos como
+«Señale la respuesta correcta:» en preguntas que no tienen nada que ver.
 
 ---
 
@@ -178,10 +182,28 @@ en el mismo wifi.
 
 ## Cómo decide qué preguntarte
 
-Cajas de Leitner con 6 niveles. Un acierto sube de caja y aleja la siguiente revisión
-(0, 1, 2, 4, 8 y 16 días); **un fallo devuelve la pregunta a la caja 0 y vuelve a
-salirte ese mismo día**. Una pregunta se marca como dominada tras 5 aciertos espaciados.
-El orden de una sesión es: falladas → nuevas → repasos vencidos.
+Cajas de Leitner con 6 niveles. Cada pregunta está en uno de cuatro estados:
+
+| Estado | Qué es | Cuándo vuelve |
+|---|---|---|
+| **Fallada** | La has fallado, o aún no la has acertado nunca | Hoy mismo, hasta que la aciertes |
+| **Repaso** | Acertada y le toca ya | Cuando vence su fecha |
+| **Descansando** | Acertada y su fecha aún no ha llegado | A los 1, 2, 4, 8 o 16 días según la caja |
+| **Sin ver** | Nunca te ha salido | Cuando haya hueco en la sesión |
+
+Un acierto sube de caja y aleja la siguiente revisión; **un fallo devuelve la pregunta a
+la caja 0 y vuelve a salirte ese mismo día**, aunque ya la tuvieras dominada. Se marca
+como dominada tras 5 aciertos espaciados, y aun así sigue volviendo cada 16 días.
+
+El orden de una sesión **mixta** es: falladas → **repasos que vencen hoy** → nuevas →
+descansando. Los repasos van antes que las nuevas a propósito: con un banco de varios
+cientos de preguntas, las nuevas llenaban la tanda entera y lo ya acertado no volvía a
+salir nunca, así que la repetición espaciada dejaba de existir. Un repaso vencido caduca;
+una pregunta nueva puede esperar a mañana.
+
+El modo **Repaso** pregunta solo lo que ya acertaste alguna vez; si hoy no vence ninguna,
+adelanta las más próximas. Y **Solo nuevas** fuerza materia nueva cuando quieres avanzar
+aunque tengas repasos pendientes.
 
 ## Comandos
 
