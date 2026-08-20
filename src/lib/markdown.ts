@@ -28,7 +28,24 @@ const ENCABEZADO = /^\s*(#{1,6})\s+(.+?)\s*#*$/
 const LINEA_INDICE = /\.{4,}\s*\d*\s*$/
 
 /** Empieza un ítem numerado: «4. De acuerdo con…». Corta continuaciones. */
-const ITEM_NUMERADO = /^\s*\d{1,3}\s*[.)]\s+\S/
+const ITEM_NUMERADO = /^\s*(?:[-*+]\s+)?\**\s*(?:pregunta|cuesti[oó]n)?\s*\d{1,3}\s*[.):]\s+\S/i
+
+/** Enunciado con etiqueta: «Pregunta 12: ¿…?», «Cuestión 3. …». */
+const ENUNCIADO_ETIQUETADO = /^(?:pregunta|cuesti[oó]n)\s*n?[.º°]?\s*(\d{1,3})\s*[:.)–-]\s*(.*)$/i
+
+/**
+ * Reduce las muchas formas de rotular un metadato a tres claves. Sin esto hay
+ * que ir ampliando listas por todo el archivo cada vez que aparece una
+ * variante nueva («Respuesta correcta», «Solución», «Opción correcta»…), y una
+ * que se olvide hace que la pregunta se descarte sin motivo aparente.
+ */
+function claveMeta(rotulo: string): 'respuesta' | 'explicacion' | 'fuente' | '' {
+  const t = rotulo.toLowerCase()
+  if (/respuesta|soluci|correcta|clave|^r$/.test(t)) return 'respuesta'
+  if (/explicaci|justificaci|motivo/.test(t)) return 'explicacion'
+  if (/fuente|referencia|^ref$|art[íi]culo/.test(t)) return 'fuente'
+  return ''
+}
 
 /**
  * Un cuaderno de oposición se organiza en secciones tituladas
@@ -80,8 +97,17 @@ export function discriminador(titulo: string): string {
     .replace(/\s+/g, ' ')
 }
 
+/**
+ * Metadato tras las opciones: «Respuesta: b», «Explicación: …».
+ *
+ * Acepta que venga como elemento de lista y con la etiqueta en negrita
+ * («- **Respuesta correcta:** B»), que es como lo escriben los tests
+ * redactados en Markdown. Las variantes de dos palabras van primero en la
+ * alternancia: si «respuesta» ganase, el «correcta» siguiente ya no encajaría
+ * con los dos puntos y la línea entera se descartaría.
+ */
 const META =
-  /^\s*(?:>\s*)?\**\s*(respuesta|soluci[oó]n|correcta|clave|r|explicaci[oó]n|justificaci[oó]n|motivo|fuente|referencia|ref|art[íi]culo)\b\s*\**\s*[:.\-–]\s*(.*)$/i
+  /^\s*(?:>\s*)?(?:[-*+]\s+)?\**\s*(respuestas?\s+correctas?|soluci[oó]n\s+correcta|opci[oó]n\s+correcta|respuesta|soluci[oó]n|correcta|clave|r|explicaci[oó]n|justificaci[oó]n|motivo|fuente|referencia|ref|art[íi]culo)\b\s*\**\s*[:.\-–]\s*\**\s*(.*?)\s*\**\s*$/i
 const CITA = /^\s*>\s?(.*)$/
 
 const esOpcion = (l: string) => OPCION_CASILLA.test(l) || OPCION_TEST.test(l)
@@ -490,8 +516,9 @@ function trocearBloques(texto: string): Bloque[] {
       // Un encabezado Markdown sí puede ser el enunciado («### ¿Cuál es…?»);
       // un título suelto en mayúsculas («1.- CUESTIONARIO 2008») nunca lo es.
       if (esTituloSeccion(l) && !ENCABEZADO.test(l)) break
-      const limpio = limpiarMarkdown(l)
-      const numerado = limpio.match(/^(\d{1,3})\s*[.)–-]\s+(.*)$/)
+      // La viñeta de lista no es parte del enunciado.
+      const limpio = limpiarMarkdown(l).replace(/^[-*+]\s+/, '')
+      const numerado = limpio.match(ENUNCIADO_ETIQUETADO) ?? limpio.match(/^(\d{1,3})\s*[.)–-]\s+(.*)$/)
       if (numerado) {
         numero = Number(numerado[1])
         partes.unshift(numerado[2])
@@ -524,7 +551,8 @@ function trocearBloques(texto: string): Bloque[] {
       if (esOpcion(l) || ENCABEZADO.test(l)) break
       const m = l.match(META)
       if (m) {
-        meta.push({ clave: m[1].toLowerCase(), valor: limpiarMarkdown(m[2]) })
+        const clave = claveMeta(m[1])
+        if (clave) meta.push({ clave, valor: limpiarMarkdown(m[2]) })
         continue
       }
       const c = l.match(CITA)
@@ -643,19 +671,14 @@ export function parsearBanco(texto: string): ResultadoBanco {
       continue
     }
 
-    const meta = (...claves: string[]) =>
-      b.meta.find((m) => claves.includes(m.clave))?.valor ?? ''
+    const meta = (clave: string) => b.meta.find((m) => m.clave === clave)?.valor ?? ''
 
     preguntas.push({
       enunciado: b.enunciado,
       opciones,
       correcta,
-      explicacion: meta('explicación', 'explicacion', 'justificación', 'justificacion', 'motivo') ||
-        b.citas.join(' '),
-      fuente:
-        meta('fuente', 'referencia', 'ref', 'artículo', 'articulo') ||
-        b.encabezado ||
-        b.tituloSeccion,
+      explicacion: meta('explicacion') || b.citas.join(' '),
+      fuente: meta('fuente') || b.encabezado || b.tituloSeccion,
     })
   }
 
@@ -721,9 +744,7 @@ function resolverCorrecta(b: Bloque, opciones: string[], claves: BloqueClave[]):
   if (negritas.length === 1) return negritas[0]
 
   // 3. Metadato «Respuesta: b» o «Solución: Tres meses».
-  const valor = b.meta.find((m) =>
-    ['respuesta', 'solución', 'solucion', 'correcta', 'clave', 'r'].includes(m.clave),
-  )?.valor
+  const valor = b.meta.find((m) => m.clave === 'respuesta')?.valor
 
   // 4. Solucionario suelto, el que corresponda a la posición de la pregunta.
   if (!valor) {
