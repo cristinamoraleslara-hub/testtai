@@ -4,9 +4,23 @@
     {
       "name": "tai-tests",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "menstruapp",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/cristina.morales/Documents/Menstruapp",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

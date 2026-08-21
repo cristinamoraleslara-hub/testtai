@@ -30,8 +30,15 @@ const LINEA_INDICE = /\.{4,}\s*\d*\s*$/
 /** Empieza un ítem numerado: «4. De acuerdo con…». Corta continuaciones. */
 const ITEM_NUMERADO = /^\s*(?:[-*+]\s+)?\**\s*(?:pregunta|cuesti[oó]n)?\s*\d{1,3}\s*[.):]\s+\S/i
 
-/** Enunciado con etiqueta: «Pregunta 12: ¿…?», «Cuestión 3. …». */
-const ENUNCIADO_ETIQUETADO = /^(?:pregunta|cuesti[oó]n)\s*n?[.º°]?\s*(\d{1,3})\s*[:.)–-]\s*(.*)$/i
+/**
+ * Enunciado con etiqueta: «Pregunta 12: ¿…?», «Cuestión 3. …».
+ *
+ * El texto es opcional porque muchos documentos ponen el rótulo solo, como
+ * encabezado («### Pregunta 24»), y la pregunta en la línea siguiente: de ahí
+ * se saca el número sin arrastrar el rótulo al enunciado.
+ */
+const ENUNCIADO_ETIQUETADO =
+  /^(?:pregunta|cuesti[oó]n)\s*n?[.º°]?\s*(\d{1,3})\s*(?:[:.)–-]\s*)?(.*)$/i
 
 /**
  * Reduce las muchas formas de rotular un metadato a tres claves. Sin esto hay
@@ -752,10 +759,25 @@ function resolverCorrecta(b: Bloque, opciones: string[], claves: BloqueClave[]):
     return porClave !== null && porClave < opciones.length ? porClave : -1
   }
 
-  const letra = valor.trim().match(/^\**\s*([a-eA-E])\s*[).\]]?\s*\**$/)
-  if (letra) return LETRAS.indexOf(letra[1].toLowerCase())
-
   const normalizar = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+
+  // Solo la letra: «Respuesta: b».
+  const soloLetra = valor.trim().match(/^\**\s*([a-eA-E])\s*[).\]]?\s*\**$/)
+  if (soloLetra) return LETRAS.indexOf(soloLetra[1].toLowerCase())
+
+  // Letra y texto: «Respuesta correcta: B) nc (netcat)». Es la forma más común
+  // en los tests escritos a mano, y también la más traicionera: si la letra y
+  // el texto no concuerdan entre sí, manda el texto, que es lo que vas a leer
+  // al estudiar y lo que delata una errata en la letra.
+  const conTexto = valor.trim().match(/^\**\s*([a-eA-E])\s*[).\]:-]\s+(\S[\s\S]*)$/)
+  if (conTexto) {
+    const porLetra = LETRAS.indexOf(conTexto[1].toLowerCase())
+    const resto = normalizar(conTexto[2])
+    const coincide = opciones.findIndex((o) => normalizar(o) === resto)
+    if (coincide >= 0) return coincide
+    if (porLetra >= 0 && porLetra < opciones.length) return porLetra
+  }
+
   const porTexto = opciones.findIndex((o) => normalizar(o) === normalizar(valor))
   if (porTexto >= 0) return porTexto
 
