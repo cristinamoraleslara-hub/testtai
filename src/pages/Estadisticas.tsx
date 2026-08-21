@@ -97,20 +97,35 @@ export function Estadisticas() {
             preguntas.filter((p) => p.tema_id === t.id),
             progreso,
           )
-          const pct = r.total ? (r.dominadas / r.total) * 100 : 0
+          const parte = (n: number) => (r.total ? (n / r.total) * 100 : 0)
           return (
             <div
               key={t.id}
               className="rounded-xl border border-[var(--color-borde)] bg-[var(--color-panel)] p-3"
             >
-              <div className="flex justify-between text-sm">
-                <span>{t.nombre}</span>
-                <span className="tabular-nums text-slate-400">
-                  {r.dominadas}/{r.total}
-                </span>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate">{t.nombre}</span>
+                <span className="shrink-0 tabular-nums text-slate-400">{r.total}</span>
               </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-panel-alto)]">
-                <div className="h-full bg-[var(--color-acierto)]" style={{ width: `${pct}%` }} />
+
+              {/* Barra por estados: se mueve desde el primer test, a diferencia
+                  de una que solo midiera las dominadas. */}
+              <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-[var(--color-panel-alto)]">
+                <div
+                  className="h-full bg-[var(--color-acierto)]"
+                  style={{ width: `${parte(r.acertadas)}%` }}
+                />
+                <div
+                  className="h-full bg-[var(--color-fallo)]"
+                  style={{ width: `${parte(r.falladas)}%` }}
+                />
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums">
+                <span className="text-[var(--color-acierto)]">{r.acertadas} acertadas</span>
+                <span className="text-[var(--color-fallo)]">{r.falladas} falladas</span>
+                <span className="text-slate-500">{r.sinVer} sin ver</span>
+                <span className="text-slate-500">{r.dominadas} dominadas</span>
               </div>
             </div>
           )

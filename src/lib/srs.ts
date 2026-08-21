@@ -112,24 +112,30 @@ export function construirSesion(
   return seleccion.slice(0, limite)
 }
 
+/**
+ * Recuento de un conjunto de preguntas.
+ *
+ * `falladas + acertadas + sinVer` suma siempre el total; `dominadas` es un
+ * subconjunto de `acertadas`. Se distinguen a propósito: «dominada» exige
+ * cinco aciertos espaciados y tarda semanas, así que por sí sola parece que
+ * estudiar no cuenta para nada.
+ */
 export function resumen(preguntas: Pregunta[], progreso: Record<string, Progreso>) {
-  let dominadas = 0
-  let pendientes = 0
-  let sinVer = 0
-  for (const p of preguntas) {
-    const pr = progreso[p.id]
-    if (!pr) sinVer++
-    else if (pr.nivel >= NIVEL_DOMINADA) dominadas++
-    else pendientes++
-  }
-  const { falladas, repasos } = clasificar(preguntas, progreso)
+  const { falladas, nuevas, repasos, descansando } = clasificar(preguntas, progreso)
+  const dominadas = preguntas.filter(
+    (p) => (progreso[p.id]?.nivel ?? 0) >= NIVEL_DOMINADA,
+  ).length
+
   return {
     total: preguntas.length,
-    dominadas,
-    pendientes,
-    sinVer,
+    /** Nunca te han salido. */
+    sinVer: nuevas.length,
+    /** Falladas, o vistas y aún sin acertar: vuelven hoy. */
     falladas: falladas.length,
+    /** Acertadas al menos una vez y no falladas después. */
+    acertadas: repasos.length + descansando.length,
     /** Acertadas a las que hoy les toca volver a salir. */
     repasoHoy: repasos.length,
+    dominadas,
   }
 }

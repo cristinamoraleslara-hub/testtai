@@ -26,6 +26,9 @@ export function Home() {
   )
 
   const stats = useMemo(() => resumen(seleccionadas, progreso), [seleccionadas, progreso])
+  // Sobre TODAS las preguntas: `stats` mira solo el tema elegido, y el botón
+  // de «Todos los temas» debe seguir contando el conjunto entero.
+  const globales = useMemo(() => resumen(preguntas, progreso), [preguntas, progreso])
 
   const disponibles = useMemo(() => {
     const { falladas, nuevas, repasos, descansando } = clasificar(seleccionadas, progreso)
@@ -68,7 +71,8 @@ export function Home() {
           <BotonTema
             activo={temaId === null}
             nombre="Todos los temas"
-            detalle={`${preguntas.length} preguntas`}
+            detalle={`${globales.total} preguntas · ${globales.dominadas} dominadas`}
+            recuento={globales}
             onClick={() => setTemaId(null)}
           />
           {temas.map((t) => {
@@ -80,7 +84,7 @@ export function Home() {
                 activo={temaId === t.id}
                 nombre={t.nombre}
                 detalle={`${r.total} preguntas · ${r.dominadas} dominadas`}
-                pct={r.total ? (r.dominadas / r.total) * 100 : 0}
+                recuento={r}
                 onClick={() => setTemaId(t.id)}
               />
             )
@@ -156,19 +160,22 @@ export function Home() {
   )
 }
 
+type Recuento = { total: number; acertadas: number; falladas: number; sinVer: number }
+
 function BotonTema({
   activo,
   nombre,
   detalle,
-  pct,
+  recuento,
   onClick,
 }: {
   activo: boolean
   nombre: string
   detalle: string
-  pct?: number
+  recuento?: Recuento
   onClick: () => void
 }) {
+  const parte = (n: number) => (recuento?.total ? (n / recuento.total) * 100 : 0)
   return (
     <button
       onClick={onClick}
@@ -180,10 +187,24 @@ function BotonTema({
     >
       <div className="text-sm font-medium">{nombre}</div>
       <div className="text-xs text-slate-400">{detalle}</div>
-      {pct !== undefined && (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-panel-alto)]">
-          <div className="h-full bg-[var(--color-acierto)]" style={{ width: `${pct}%` }} />
-        </div>
+      {recuento && (
+        <>
+          <div className="mt-2 flex h-1 overflow-hidden rounded-full bg-[var(--color-panel-alto)]">
+            <div
+              className="h-full bg-[var(--color-acierto)]"
+              style={{ width: `${parte(recuento.acertadas)}%` }}
+            />
+            <div
+              className="h-full bg-[var(--color-fallo)]"
+              style={{ width: `${parte(recuento.falladas)}%` }}
+            />
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] tabular-nums">
+            <span className="text-[var(--color-acierto)]">{recuento.acertadas} acertadas</span>
+            <span className="text-[var(--color-fallo)]">{recuento.falladas} falladas</span>
+            <span className="text-slate-500">{recuento.sinVer} sin ver</span>
+          </div>
+        </>
       )}
     </button>
   )

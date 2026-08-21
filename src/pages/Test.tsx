@@ -4,20 +4,8 @@ import { useDatos } from '../hooks/useDatos'
 import { useTiempoEstudio } from '../hooks/useTiempoEstudio'
 import { MetaDiaria } from '../components/MetaDiaria'
 import { construirSesion, type Modo } from '../lib/srs'
+import { barajarOpciones, nuevaSemilla } from '../lib/barajar'
 import type { Pregunta } from '../types'
-
-/** Baraja las opciones para no memorizar la posición de la correcta. */
-function barajarOpciones(p: Pregunta) {
-  const orden = [0, 1, 2, 3]
-  for (let i = 3; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[orden[i], orden[j]] = [orden[j], orden[i]]
-  }
-  return {
-    opciones: orden.map((i) => p.opciones[i]),
-    correcta: orden.indexOf(p.correcta),
-  }
-}
 
 export function Test() {
   const [params] = useSearchParams()
@@ -31,6 +19,8 @@ export function Test() {
   const [indice, setIndice] = useState(0)
   const [elegida, setElegida] = useState<number | null>(null)
   const [marcador, setMarcador] = useState({ aciertos: 0, fallos: 0 })
+  /** Cambia en cada tanda: hace que las opciones se recoloquen de una vez a otra. */
+  const [semillaSesion, setSemillaSesion] = useState(nuevaSemilla)
   /** Falladas de esta tanda, para el repaso final. */
   const [falladas, setFalladas] = useState<{ pregunta: Pregunta; respondiste: string }[]>([])
 
@@ -44,7 +34,10 @@ export function Test() {
   }, [listo, cola, preguntas, progreso, modo, limite, temaId])
 
   const actual = cola?.[indice]
-  const barajada = useMemo(() => (actual ? barajarOpciones(actual) : null), [actual])
+  const barajada = useMemo(
+    () => (actual ? barajarOpciones(actual, semillaSesion) : null),
+    [actual, semillaSesion],
+  )
 
   if (!listo || !cola) return <p className="text-slate-400">Preparando test…</p>
 
@@ -71,6 +64,7 @@ export function Test() {
                 setElegida(null)
                 setMarcador({ aciertos: 0, fallos: 0 })
                 setFalladas([])
+                setSemillaSesion(nuevaSemilla())
               }}
               className="flex-1 rounded-xl bg-[var(--color-acento)] py-2.5 text-sm font-medium text-white"
             >
