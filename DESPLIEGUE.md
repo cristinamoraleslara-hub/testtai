@@ -136,3 +136,47 @@ crearlo. Edítalo en Authentication → Users y confírmalo.
 **Quiero llevarme mis datos** — **Contenido → Exportar copia de seguridad** baja un JSON
 con todos tus temas y preguntas. El progreso vive en Supabase; puedes verlo y exportarlo
 desde su **Table Editor**.
+
+## Dos entornos: producción y desarrollo
+
+La web vive en dos sitios, servidos por el mismo proyecto de Vercel y el mismo
+repositorio:
+
+| Entorno | Dominio | Rama | Variables de Vercel |
+|---|---|---|---|
+| Producción | `testtai.vercel.app` | `main` | Production |
+| Desarrollo | `dev-testtai.vercel.app` | `dev` | Preview |
+
+Cada `git push` a `dev` reconstruye el de desarrollo, y cada push a `main` el de
+producción. Para llevar a producción lo probado en desarrollo, se fusiona `dev`
+en `main`.
+
+### Por qué así y no con «entornos personalizados»
+
+Vercel tiene *Custom Environments*, que sería lo más directo, pero son de plan Pro
+(50 $ por cada cinco). Una rama con su dominio hace lo mismo sin coste: Vercel trata
+cualquier rama distinta de la de producción como **Preview**, y las variables marcadas
+como Preview solo llegan a esas compilaciones.
+
+### Lo que hay que saber para configurar analítica por entornos
+
+Esto es Vite, y **las variables `VITE_*` se incrustan al compilar**, no se leen en el
+navegador al abrir la página. Consecuencias:
+
+- No vale un único identificador de GTM con un `if` en tiempo de ejecución: hacen falta
+  dos compilaciones, una por entorno.
+- La variable se declara **dos veces** en Vercel, con el mismo nombre y distinto valor:
+  una marcada solo *Production* y otra solo *Preview*.
+- Tras cambiar una variable hay que **volver a desplegar**; editarla no rebuildea sola.
+
+Para distinguir el entorno desde el código, Vite expone `import.meta.env.MODE`, pero en
+Vercel las dos compilaciones son de producción para Vite. Lo fiable es una variable
+propia, por ejemplo `VITE_ENTORNO` con valor `produccion` o `desarrollo`.
+
+### Cuidado: los dos entornos comparten la misma base de datos
+
+Ahora mismo `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` están marcadas como
+*Production and Preview*, o sea que desarrollo escribe en los **mismos datos** que
+producción. Para probar analítica da igual, pero si algún día se prueban cosas que
+tocan el progreso o el contenido, conviene crear un proyecto de Supabase aparte y
+apuntar ahí las variables de Preview.
