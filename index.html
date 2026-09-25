@@ -60,6 +60,10 @@
     <script>
       ;(function (w, d, s, l, i, p) {
         if (!/^GTM-[A-Z0-9]+$/.test(i)) return
+        // Producción no define VITE_GTM_PARAMS porque su entorno de GTM no lleva
+        // parámetros. Vite deja entonces el marcador sin sustituir, y pegarlo a
+        // la URL del contenedor la rompería: si sigue ahí, se trata como vacío.
+        if (/^%VITE_/.test(p)) p = ''
         w[l] = w[l] || []
         w[l].push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' })
         var f = d.getElementsByTagName(s)[0]
