@@ -2,6 +2,45 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Consentimiento por defecto (Consent Mode v2).
+         Va lo primero, antes de GTM, para que ninguna etiqueta pueda escribir
+         cookies mientras no haya respuesta: `wait_for_update` le da 500 ms a la
+         decisión guardada antes de dar por firme el «denegado». -->
+    <script>
+      window.dataLayer = window.dataLayer || []
+      function gtag() {
+        dataLayer.push(arguments)
+      }
+      gtag('consent', 'default', {
+        ad_storage: 'denied',
+        analytics_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        wait_for_update: 500,
+      })
+    </script>
+
+    <!-- Google Tag Manager.
+         El contenedor es el mismo en todos los entornos; lo que cambia son los
+         parámetros `gtm_auth` y `gtm_preview`, que llegan en VITE_GTM_PARAMS.
+         Vite sustituye los %VITE_*% al compilar, así que cada entorno lleva
+         incrustados los suyos. Si no hay contenedor configurado no se carga
+         nada: así el desarrollo en local no mete ruido en las métricas. -->
+    <script>
+      ;(function (w, d, s, l, i, p) {
+        if (!/^GTM-[A-Z0-9]+$/.test(i)) return
+        w[l] = w[l] || []
+        w[l].push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' })
+        var f = d.getElementsByTagName(s)[0]
+        var j = d.createElement(s)
+        var dl = l != 'dataLayer' ? '&l=' + l : ''
+        j.async = true
+        j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl + p
+        f.parentNode.insertBefore(j, f)
+      })(window, document, 'script', 'dataLayer', '%VITE_GTM_ID%', '%VITE_GTM_PARAMS%')
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
@@ -11,6 +50,60 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Banner de consentimiento.
+         Vive fuera de #root, en el HTML: así aparece con la primera pintura, sin
+         esperar a que React monte, que es cuando GTM ya está decidiendo. -->
+    <div
+      id="cookie-banner"
+      role="region"
+      aria-label="Aviso de cookies"
+      hidden
+      style="position: fixed; bottom: 0; left: 0; right: 0; background: #111827; color: #f8fafc; padding: 16px; text-align: center; z-index: 9999; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);"
+    >
+      <p style="margin: 0 0 12px 0">Usamos cookies para medir el uso de la web. Puedes rechazarlas.</p>
+      <button type="button" data-consent="granted" style="background: #2563eb; color: #fff; border: 0; padding: 9px 18px; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600; margin-right: 8px">Aceptar todas</button>
+      <button type="button" data-consent="denied" style="background: transparent; color: #cbd5e1; border: 1px solid #475569; padding: 9px 18px; border-radius: 6px; cursor: pointer; font: inherit">Rechazar</button>
+    </div>
+
+    <script>
+      ;(function () {
+        var banner = document.getElementById('cookie-banner')
+        var guardado = null
+        // En navegación privada o con el almacenamiento bloqueado, leer localStorage
+        // lanza. Si no se puede recordar la decisión, se pregunta otra vez.
+        try {
+          guardado = localStorage.getItem('cookie_consent')
+        } catch (e) {}
+
+        function conceder() {
+          gtag('consent', 'update', {
+            ad_storage: 'granted',
+            analytics_storage: 'granted',
+            ad_user_data: 'granted',
+            ad_personalization: 'granted',
+          })
+          // Para etiquetas que no sean de Google y no escuchen el consentimiento.
+          window.dataLayer.push({ event: 'consent_updated' })
+        }
+
+        function decidir(valor) {
+          try {
+            localStorage.setItem('cookie_consent', valor)
+          } catch (e) {}
+          if (valor === 'granted') conceder()
+          banner.hidden = true
+        }
+
+        if (guardado === 'granted') conceder()
+        else if (guardado !== 'denied') banner.hidden = false
+
+        banner.addEventListener('click', function (e) {
+          var valor = e.target.getAttribute && e.target.getAttribute('data-consent')
+          if (valor) decidir(valor)
+        })
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

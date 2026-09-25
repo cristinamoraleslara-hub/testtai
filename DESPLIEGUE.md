@@ -180,3 +180,55 @@ Ahora mismo `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` están marcadas como
 producción. Para probar analítica da igual, pero si algún día se prueban cosas que
 tocan el progreso o el contenido, conviene crear un proyecto de Supabase aparte y
 apuntar ahí las variables de Preview.
+
+## Analítica: GTM y Consent Mode v2
+
+El contenedor es **uno solo**, `GTM-NL7MVKPD`. Lo que distingue a cada entorno son
+los parámetros `gtm_auth` y `gtm_preview` que GTM genera para sus *entornos*:
+
+| Entorno de GTM | `gtm_preview` | Dónde está desplegado hoy |
+|---|---|---|
+| DEV | `env-3` | `dev-testtai.vercel.app` (rama `dev`) |
+| QA | `env-4` | sin desplegar |
+| PRE | `env-5` | sin desplegar |
+| PROD | — (sin parámetros) | `testtai.vercel.app` (rama `main`) |
+
+QA y PRE tienen credenciales pero no tienen sitio donde vivir: harían falta dos
+ramas más con su dominio, igual que se hizo con `dev`.
+
+### Cómo está montado
+
+En `index.html` hay un único bloque de GTM que lee dos variables:
+
+- `VITE_GTM_ID` — el contenedor.
+- `VITE_GTM_PARAMS` — los parámetros del entorno, vacío en producción.
+
+Vite las sustituye al compilar, así que cada despliegue lleva las suyas dentro. Si
+`VITE_GTM_ID` no tiene forma de `GTM-XXXX`, **no se carga nada**: en local no se
+mide, que es lo que se quiere para no ensuciar los informes.
+
+Los valores de cada entorno están en `.env.example`.
+
+### Consent Mode v2
+
+Antes de GTM se declara el consentimiento **denegado** por defecto
+(`ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`), con
+`wait_for_update: 500` para dar margen a leer la decisión ya guardada.
+
+El banner vive en el propio `index.html`, fuera de `#root`, para que aparezca con la
+primera pintura y no cuando React monte, que es tarde. Guarda la respuesta en
+`localStorage` bajo `cookie_consent`, y al aceptar manda `consent → update` y empuja
+`consent_updated` al `dataLayer` para las etiquetas que no sean de Google.
+
+Para volver a ver el banner, borra esa clave desde la consola del navegador:
+
+```js
+localStorage.removeItem('cookie_consent')
+```
+
+### No hay etiqueta `<noscript>`
+
+El fragmento oficial de GTM incluye un `<iframe>` dentro de `<noscript>`. Aquí no se
+ha puesto **a propósito**: esto es una SPA de React, así que sin JavaScript no hay
+aplicación que medir, solo una página en blanco. Ese iframe no podría registrar nada
+real y solo añadiría una petición.
