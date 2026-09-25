@@ -21,6 +21,36 @@
       })
     </script>
 
+    <!-- Qué entorno es este, para que GTM pueda repartir por él.
+         Se publica en el dataLayer como `env`, el mismo nombre que ya se usa en
+         la URL, para que en GTM valga una Variable de capa de datos llamada
+         `env` en lugar de leer la query.
+         Se resuelve en este orden:
+           1. `?env=` en la URL, que manda y además se recuerda.
+           2. Lo recordado de antes en esta pestaña.
+           3. VITE_ENTORNO, lo que toque por compilación.
+         Va ANTES de cargar GTM: empujado después, las etiquetas que disparan en
+         «todas las páginas» ya han corrido sin saber el entorno. -->
+    <script>
+      ;(function () {
+        var permitidos = ['dev', 'qa', 'pre', 'pro']
+        var vale = function (v) {
+          return permitidos.indexOf(v) >= 0
+        }
+        var env = null
+        try {
+          env = new URLSearchParams(location.search).get('env')
+        } catch (e) {}
+        try {
+          if (vale(env)) sessionStorage.setItem('entorno_medicion', env)
+          else env = sessionStorage.getItem('entorno_medicion')
+        } catch (e) {}
+        if (!vale(env)) env = '%VITE_ENTORNO%'
+        if (!vale(env)) env = 'pro'
+        window.dataLayer.push({ env: env })
+      })()
+    </script>
+
     <!-- Google Tag Manager.
          El contenedor es el mismo en todos los entornos; lo que cambia son los
          parámetros `gtm_auth` y `gtm_preview`, que llegan en VITE_GTM_PARAMS.

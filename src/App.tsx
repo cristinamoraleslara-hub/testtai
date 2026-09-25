@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProveedorDatos, useDatos } from './hooks/useDatos'
 import { importarConRecarga } from './lib/cargaDiferida'
 import { Layout } from './components/Layout'
+import { MantenerEntorno } from './components/MantenerEntorno'
 import { Home } from './pages/Home'
 import { Test } from './pages/Test'
 import { Estadisticas } from './pages/Estadisticas'
@@ -43,6 +44,7 @@ function Rutas() {
 export default function App() {
   return (
     <BrowserRouter>
+      <MantenerEntorno />
       <ProveedorDatos>
         <Rutas />
       </ProveedorDatos>
